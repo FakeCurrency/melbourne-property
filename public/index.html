@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Liveable Melbourne — live, invest &amp; develop scores by suburb</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header class="brand">
+      <div>
+        <h1>Liveable&nbsp;Melbourne</h1>
+        <p class="tag">Every suburb scored to live, invest &amp; develop</p>
+      </div>
+      <button id="theme" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">◑</button>
+    </header>
+
+    <div class="best-h">Show me the best…</div>
+    <div class="best-row" id="bestRow">
+      <button class="best-btn" data-kind="live"><span class="bi">🏡</span>Best to live</button>
+      <button class="best-btn" data-kind="invest"><span class="bi">📈</span>Best to invest</button>
+      <button class="best-btn" data-kind="develop"><span class="bi">🏗️</span>Best to develop</button>
+    </div>
+
+    <!-- audience modes -->
+    <div class="seg modes" id="modeSeg">
+      <button data-mode="live"><span class="dot live"></span>Live</button>
+      <button data-mode="balanced" class="on"><span class="dot bal"></span>Balanced</button>
+      <button data-mode="invest"><span class="dot inv"></span>Invest / Develop</button>
+    </div>
+    <p class="modecopy" id="modeCopy"></p>
+
+    <div class="presets-h">One-click presets</div>
+    <div class="presets" id="presetRow"></div>
+
+    <div class="card controls">
+      <div class="blend-row">
+        <span>Liveability</span><span class="blend-val"><b id="wLive">50</b>% / <b id="wDev">50</b>%</span><span>Development</span>
+      </div>
+      <input type="range" id="blend" min="0" max="100" value="50" />
+      <p class="active-preset" id="activePreset"></p>
+
+      <div class="cby-label">Colour map by</div>
+      <div class="cby" id="colorByChips"></div>
+
+      <label class="ctl ctl-min">Hide weaker areas below <b id="minVal">0</b>
+        <input type="range" id="minScore" min="0" max="90" value="0" /></label>
+      <label class="elec-toggle"><input type="checkbox" id="elecToggle" />
+        ⚡ Show electricity network <span class="muted">(transmission lines + substations)</span></label>
+    </div>
+
+    <div class="search card">
+      <input type="search" id="search" placeholder="Search a suburb…" autocomplete="off" />
+      <div id="results"></div>
+    </div>
+
+    <section id="scorecard" class="card empty">
+      <p class="placeholder">Pick a suburb on the map, search, or tap the list to see its full scorecard.</p>
+    </section>
+
+    <section class="card lists" id="listsCard">
+      <div class="lists-head">Top suburbs by <b id="listLabel">Overall</b></div>
+      <ol id="topList" class="ranklist"></ol>
+    </section>
+
+    <footer class="meta">
+      <button id="aboutBtn" class="link">Guide, key &amp; data sources</button>
+      <span id="genline"></span>
+    </footer>
+  </aside>
+
+  <main id="mapwrap">
+    <div id="map"></div>
+    <div id="legend" class="legend"></div>
+    <div id="hovercard" class="hovercard hidden"></div>
+  </main>
+</div>
+
+<div id="aboutModal" class="modal hidden">
+  <div class="modal-box card">
+    <button class="close" id="aboutClose" aria-label="Close">×</button>
+    <h2>Guide &amp; key</h2>
+    <p>Every <b>Greater Melbourne suburb</b> (ABS SA2) is ranked against all others on each input
+       (0–100, higher = better), then blended into two scores plus a slider-controlled overall.</p>
+    <p class="methodstate" id="methodState"></p>
+
+    <h3>How to use it</h3>
+    <ol class="guide-steps">
+      <li>Pick a <b>preset</b> (or a mode) — the map recolours and the list re-ranks instantly.</li>
+      <li>Read the map colour, or the <b>ranked list</b> in the panel.</li>
+      <li><b>Click a suburb</b> for its full scorecard.</li>
+      <li>Tick <b>⚡ Show electricity network</b> to overlay transmission lines + substations.</li>
+    </ol>
+
+    <h3>The two scores</h3>
+    <ul class="keylist">
+      <li><b>🏠 Liveability</b> — where to live or rent. Personal safety + family lead.</li>
+      <li><b>🏗️ Development</b> <span class="prelim">preliminary</span> — where to invest/build. Headroom, growth, grid support.</li>
+      <li><b>⚖️ Overall</b> — the slider blends the two; a preset sets a starting point.</li>
+    </ul>
+
+    <h3>Map colour &amp; grade</h3>
+    <div class="scalekey">
+      <span class="muted">worse</span>
+      <div class="bands"><i style="background:#d7263d"></i><i style="background:#f08c2e"></i><i style="background:#f3c613"></i><i style="background:#5bbf3a"></i><i style="background:#1f8a3b"></i></div>
+      <span class="muted">better</span>
+    </div>
+    <p class="muted">Score 0–100. The palette shifts with the mode — calm green in Live, blue→gold in
+       Invest. The map's bottom-right legend always shows the current scale.</p>
+    <div class="grades-key">
+      <span><i style="background:#248a3d"></i>A+ / A excellent</span>
+      <span><i style="background:#e0a400"></i>B good</span>
+      <span><i style="background:#ff9500"></i>C fair</span>
+      <span><i style="background:#ff3b30"></i>D weak</span>
+    </div>
+
+    <h3>Presets <span class="muted">(one click sets the blend + palette)</span></h3>
+    <ul class="keylist">
+      <li><b>Family first</b> <span class="muted">85 / 15</span> — safe, settled place to raise kids.</li>
+      <li><b>Pure safety</b> <span class="muted">95 / 5</span> — personal safety above all else.</li>
+      <li><b>Balanced investor</b> <span class="muted">45 / 55</span> — all-round buy-and-hold that's still liveable.</li>
+      <li><b>Value-add / developer</b> <span class="muted">20 / 80</span> — redevelopment headroom + growth corridors.</li>
+    </ul>
+
+    <h3 id="liveHead">Liveability — <span class="muted">can you live/rent here safely?</span></h3>
+    <ul class="wlist" id="liveWeights"></ul>
+    <p class="muted" id="liveNote">Personal safety (assault, robbery, sexual offences) is weighted far
+       above property crime, which is shown separately for transparency.</p>
+
+    <h3>Family suitability <span class="muted">(badge)</span></h3>
+    <ul class="wlist" id="famWeights"></ul>
+
+    <h3>Development potential <span class="prelim">preliminary</span></h3>
+    <ul class="wlist" id="devWeights"></ul>
+    <p class="muted">Room to add value: redevelopment headroom + <b>recent capital growth</b>
+       (Valuer-General 3-year CAGR) + <b>electricity-network support</b> (Geoscience Australia —
+       proximity to transmission lines &amp; substations; a connection-feasibility proxy, since true
+       spare capacity is commercially sensitive). The <b>Market &amp; Price</b> and
+       <b>Infrastructure</b> blocks lead in Invest/Develop modes. <b>Still to come:</b> planning
+       zoning &amp; overlays.</p>
+
+    <h3>Chips you'll see</h3>
+    <ul class="keylist">
+      <li><b>Very safe / Safe</b> — low personal-crime rate</li>
+      <li><b>Family-friendly</b> — kids + education + safety</li>
+      <li><b>Blue-chip</b> — affluent and very safe</li>
+      <li><b>Growth corridor</b> — new family-estate growth area</li>
+      <li><b>Grid-ready</b> — strong electricity-network support</li>
+      <li><b>Premium / Affordable upside</b> — price band</li>
+    </ul>
+
+    <h3>Electricity overlay <span class="muted">(⚡ toggle on the map)</span></h3>
+    <div class="elec-key">
+      <span><i class="line" style="background:#e5484d"></i>500 kV transmission</span>
+      <span><i class="line" style="background:#f76808"></i>220 kV transmission</span>
+      <span><i class="line" style="background:#2a78d6"></i>66 kV line</span>
+      <span><i class="dot" style="background:#e6a700"></i>Substation</span>
+    </div>
+    <p class="muted">Closer to lines + more substations nearby = easier/cheaper to connect new
+       development. Proximity is a proxy — true spare capacity isn't public.</p>
+
+    <h3>Data sources (all free / public)</h3>
+    <ul id="sourceList" class="sources"></ul>
+    <p class="caveat"><b>Crime is published per Local Government Area</b>, so all suburbs in an LGA
+       share its rate — a quiet pocket can inherit a busy retail strip's crime. Suburb-level crime is
+       a planned refinement. General information only; not financial or planning advice.</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="js/app.js"></script>
+</body>
+</html>
