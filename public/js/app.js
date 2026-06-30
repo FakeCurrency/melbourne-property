@@ -106,8 +106,21 @@
   // ---- scorecard --------------------------------------------------------
   const gradeColor = g => ({ "A+": "#248a3d", "A": "#34c759", "B": "#ffcc00", "C": "#ff9500", "D": "#ff3b30" }[g] || "#8e8e93");
   const sc = document.getElementById("scorecard");
+  const PILL_TIPS = {
+    "Personal safety": "Rate of crimes against the person (assault, robbery, sexual offences). Greener = lower than most suburbs.",
+    "Socio-economic": "ABS SEIFA decile — relative socio-economic advantage (10 = most advantaged).",
+    "Children 0–14": "Share of residents aged 0–14 — a family-area signal.",
+    "Owner-occupied": "Share of homes lived in by their owners — a housing-stability signal.",
+    "Property safety": "Property-crime rate (theft, break-ins). Shown separately and weighted lightly.",
+    "Low social housing": "Share of social / public housing, shown for transparency.",
+    "Detached headroom": "Share of low-density detached houses — room to rebuild or subdivide.",
+    "Recent growth": "3-year change in median house price — recent momentum, not a forecast.",
+    "Grid support": "How well the nearby electricity network can support larger development.",
+    "Rental turnover": "Share of rented dwellings — investor / tenant activity.",
+    "Low density": "People per km² (inverted, so fewer people = more headroom).",
+  };
   const bar = (label, score, valText, sub) =>
-    `<div class="pill${sub ? " sub" : ""}"><span class="pl">${label}</span>
+    `<div class="pill${sub ? " sub" : ""}" title="${PILL_TIPS[label] || ""}"><span class="pl">${label}</span>
       <span class="bar"><i style="width:${score}%;background:${col(score)}"></i></span>
       <span class="pv">${valText}</span></div>`;
 
@@ -244,8 +257,15 @@
   minScore$.oninput = () => { minScore = +minScore$.value; activeBest = null; document.getElementById("minVal").textContent = minScore; repaint(); highlightBest(); };
 
   // colour-by toggle chips (one tap to colour the map by a single layer)
+  const CBY_TIPS = {
+    overall: "Blend of Liveability and Development (set by the slider).",
+    live: "How good it is to live or rent here now.", dev: "Room to invest, build or subdivide.",
+    safety: "Personal-crime rate — greener = lower.", seifa: "ABS socio-economic advantage.",
+    family: "Family-suitability score.", growth: "Recent 3-year price growth.",
+    grid: "Electricity-network support.",
+  };
   const cbyRow = document.getElementById("colorByChips");
-  cbyRow.innerHTML = COLORBY.map(([k, lab]) => `<button data-cby="${k}">${lab}</button>`).join("");
+  cbyRow.innerHTML = COLORBY.map(([k, lab]) => `<button data-cby="${k}" title="${CBY_TIPS[k] || ""}">${lab}</button>`).join("");
   cbyRow.querySelectorAll("button").forEach(b => b.onclick = () => { colorBy = b.dataset.cby; activeBest = null; refresh(); });
   const highlightColorBy = () => cbyRow.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.cby === colorBy));
 
@@ -290,10 +310,13 @@
     safety: "Safety (low crime)", seifa: "Socio-economic", growth: "Price growth", grid: "Grid support",
   };
   function updateLegend() {
-    document.getElementById("legend").innerHTML =
-      `<div class="lt">${LABELS[colorBy]}${colorBy === "live" && mode === "live" ? " · family" : ""} (0–100)</div>
+    const el = document.getElementById("legend");
+    el.innerHTML =
+      `<div class="lt"><span>${LABELS[colorBy]}${colorBy === "live" && mode === "live" ? " · family" : ""} (0–100)</span>
+         <button class="lg-help" type="button" title="How to read this map">?</button></div>
        <div class="ramp" style="background:${cssGradient(MODE_RAMP[mode])}"></div>
        <div class="scalex"><span>lower</span><span>higher</span></div>`;
+    el.querySelector(".lg-help").onclick = () => openGuide("map");
   }
   const entries = Object.entries(A);
   function updateLists() {
@@ -308,7 +331,16 @@
 
   // ---- methodology (live-updating) --------------------------------------
   const W = data.weights;
-  const wl = obj => Object.entries(obj).map(([k, v]) => `<li>${k.replace(/_/g, " ")} — <b>${Math.round(v * 100)}%</b></li>`).join("");
+  const WEIGHT_LABELS = {
+    person_safety: "Personal safety (low crime)", seifa: "Socio-economic advantage (SEIFA)",
+    owner_occ: "Owner-occupied housing", property_safety: "Property-crime rate",
+    family_child: "Children 0–14", child: "Children 0–14",
+    ieo: "Education &amp; occupation (SEIFA IEO)", detached_share: "Detached-housing headroom",
+    growth: "Recent price growth (3-yr)", infra: "Electricity-grid support",
+    rental_share: "Rental turnover", low_density: "Lower current density",
+  };
+  const wl = obj => Object.entries(obj).map(([k, v]) =>
+    `<li><span class="wk">${WEIGHT_LABELS[k] || k.replace(/_/g, " ")}</span><span class="wv">${Math.round(v * 100)}%</span></li>`).join("");
   function updateMethodology() {
     const wd = 100 - Math.round(wLive * 100);
     const p = PRESETS.find(x => x.key === activePreset);
@@ -327,6 +359,7 @@
   document.getElementById("devWeights").innerHTML = wl(W.development);
   document.getElementById("sourceList").innerHTML = Object.values(data.sources).map(s => `<li>${s}</li>`).join("");
   document.getElementById("genline").textContent = `${data.count} suburbs · built ${data.generated}`;
+  document.getElementById("genline2").textContent = `${data.count} suburbs scored · data built ${data.generated}.`;
 
   // ---- search -----------------------------------------------------------
   const search = document.getElementById("search"), results = document.getElementById("results");
@@ -368,13 +401,25 @@
   }
   document.getElementById("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
-  // ---- about modal ------------------------------------------------------
+  // ---- guide modal (tabbed) ---------------------------------------------
   const modal = document.getElementById("aboutModal");
-  document.getElementById("aboutBtn").onclick = () => { updateMethodology(); modal.classList.remove("hidden"); };
-  document.getElementById("aboutClose").onclick = () => modal.classList.add("hidden");
-  modal.onclick = e => { if (e.target === modal) modal.classList.add("hidden"); };
+  const guideTabs = document.getElementById("guideTabs");
+  function switchTab(name) {
+    guideTabs.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+    modal.querySelectorAll(".gtab").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== name));
+    modal.querySelector(".modal-box").scrollTop = 0;
+  }
+  guideTabs.querySelectorAll("button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  function openGuide(tab) { updateMethodology(); if (tab) switchTab(tab); modal.classList.remove("hidden"); }
+  const closeGuide = () => modal.classList.add("hidden");
+  document.getElementById("aboutBtn").onclick = () => openGuide();
+  document.getElementById("howtoBtn").onclick = () => openGuide("start");
+  document.getElementById("aboutClose").onclick = closeGuide;
+  modal.onclick = e => { if (e.target === modal) closeGuide(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeGuide(); });
 
   // ---- init -------------------------------------------------------------
   setTheme(localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
   setMode("balanced");
+  if (!localStorage.getItem("seenGuide")) { openGuide("start"); localStorage.setItem("seenGuide", "1"); }
 })();

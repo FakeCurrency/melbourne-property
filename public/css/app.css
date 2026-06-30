@@ -194,6 +194,63 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
 .elec-key span{font-size:12.5px;display:flex;align-items:center;gap:9px;color:var(--ink2)}
 .elec-key i.line{width:26px;height:3px;border-radius:2px;flex:none}
 .elec-key i.dot{width:11px;height:11px;border-radius:50%;flex:none}
+
+/* ===== upgraded guide modal ===== */
+.modal-intro{font-size:13px;color:var(--ink);margin:0 0 8px}
+.modal-box h4{margin:13px 0 4px;font-size:13px;font-weight:700}
+/* tab bar */
+.gtabs{display:flex;gap:3px;background:var(--chip);border-radius:11px;padding:3px;margin:10px 0 14px;position:sticky;top:0;z-index:2}
+.gtabs button{flex:1;border:0;background:transparent;color:var(--ink2);font-weight:600;font-size:12px;
+  padding:7px 4px;border-radius:8px;cursor:pointer;transition:.15s}
+.gtabs button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+/* two scores summary cards */
+.sk-list{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+.sk-item{display:flex;gap:11px;align-items:flex-start}
+.sk-ico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.sk-item b{font-size:13.5px}
+.sk-item span{display:block;font-size:12.5px;color:var(--ink2);line-height:1.5;margin-top:1px}
+/* "what makes a score high" */
+.crit{display:flex;flex-direction:column;gap:8px;margin:6px 0 4px}
+.crit-row{font-size:12.5px;color:var(--ink2);line-height:1.55;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.crit-h{display:inline-block;font-weight:700;color:#fff;font-size:11px;padding:2px 8px;border-radius:7px;margin-right:7px;white-space:nowrap}
+.crit-live{background:#2e9e5b}.crit-dev{background:#2f6df0}
+.crit-fam{color:var(--ink2)}
+/* keylist columns */
+.keylist.two-col{columns:2;column-gap:18px}
+.keylist.two-col li{break-inside:avoid}
+/* glossary */
+.glossary{margin:6px 0 0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;align-items:baseline}
+.glossary dt{font-weight:700;font-size:12px;color:var(--ink);white-space:nowrap}
+.glossary dd{margin:0;font-size:12px;color:var(--ink2);line-height:1.45}
+/* source blocks */
+.srcblocks{display:flex;flex-direction:column;gap:9px;margin:6px 0}
+.srcblock{display:flex;gap:11px;background:var(--bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px}
+.sb-ico{font-size:18px;line-height:1.2;flex:none}
+.sb-h{font-size:13px;font-weight:700;color:var(--ink);display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.sb-src{font-size:10.5px;font-weight:600;color:#fff;background:var(--accent);padding:1px 7px;border-radius:20px}
+.srcblock p{margin:4px 0 0;font-size:12px;color:var(--ink2);line-height:1.5}
+.srcblock p b{color:var(--ink)}
+.rawsrc{margin:12px 0 0;border:1px solid var(--line);border-radius:10px;padding:4px 11px}
+.rawsrc summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);padding:6px 0}
+.rawsrc .sources{margin:2px 0 6px}
+/* weight lists -> tidy rows */
+.wlist{list-style:none;margin:6px 0;padding:0}
+.wlist li{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin:0;padding:5px 0;border-top:1px solid var(--line)}
+.wlist li:first-child{border-top:0}
+.wlist .wk{color:var(--ink2)}
+.wlist .wv{font-weight:700;color:var(--ink)}
+
+/* "how to read this map" floating button + legend help */
+.howto-btn{position:absolute;left:14px;top:14px;z-index:600;background:var(--card);color:var(--ink);
+  border:1px solid var(--line);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:600;
+  cursor:pointer;box-shadow:var(--shadow)}
+.howto-btn:hover{border-color:var(--accent);color:var(--accent)}
+.legend .lt{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lg-help{border:1px solid var(--line);background:var(--bg);color:var(--ink2);width:17px;height:17px;
+  border-radius:50%;font-size:11px;font-weight:700;cursor:pointer;line-height:1;padding:0;flex:none}
+.lg-help:hover{border-color:var(--accent);color:var(--accent)}
+.best-cap{margin:-4px 2px 0;font-size:11px;color:var(--ink2)}
+.best-cap b{color:var(--ink)}
 .prelim{background:var(--prelim);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;vertical-align:middle}
 .caveat{font-size:11.5px;color:var(--ink2);background:rgba(255,159,10,.1);border-radius:10px;padding:9px 11px;margin-top:12px}
 

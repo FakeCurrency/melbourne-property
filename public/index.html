@@ -21,16 +21,17 @@
 
     <div class="best-h">Show me the best…</div>
     <div class="best-row" id="bestRow">
-      <button class="best-btn" data-kind="live"><span class="bi">🏡</span>Best to live</button>
-      <button class="best-btn" data-kind="invest"><span class="bi">📈</span>Best to invest</button>
-      <button class="best-btn" data-kind="develop"><span class="bi">🏗️</span>Best to develop</button>
+      <button class="best-btn" data-kind="live" title="Highlights the safest, most liveable suburbs (top ~20)"><span class="bi">🏡</span>Best to live</button>
+      <button class="best-btn" data-kind="invest" title="Highlights the strongest recent price growth (top ~20)"><span class="bi">📈</span>Best to invest</button>
+      <button class="best-btn" data-kind="develop" title="Highlights the most room to build / subdivide (top ~20)"><span class="bi">🏗️</span>Best to develop</button>
     </div>
+    <p class="best-cap">Each highlights the <b>top ~20 areas</b> for that goal and fades the rest.</p>
 
     <!-- audience modes -->
     <div class="seg modes" id="modeSeg">
-      <button data-mode="live"><span class="dot live"></span>Live</button>
-      <button data-mode="balanced" class="on"><span class="dot bal"></span>Balanced</button>
-      <button data-mode="invest"><span class="dot inv"></span>Invest / Develop</button>
+      <button data-mode="live" title="Calm green palette; leans liveability toward families"><span class="dot live"></span>Live</button>
+      <button data-mode="balanced" class="on" title="Neutral 50/50 view across liveability and development"><span class="dot bal"></span>Balanced</button>
+      <button data-mode="invest" title="Blue→gold palette; emphasises development and growth"><span class="dot inv"></span>Invest / Develop</button>
     </div>
     <p class="modecopy" id="modeCopy"></p>
 
@@ -41,14 +42,14 @@
       <div class="blend-row">
         <span>Liveability</span><span class="blend-val"><b id="wLive">50</b>% / <b id="wDev">50</b>%</span><span>Development</span>
       </div>
-      <input type="range" id="blend" min="0" max="100" value="50" />
+      <input type="range" id="blend" min="0" max="100" value="50" title="Weight the Overall score between Liveability and Development" />
       <p class="active-preset" id="activePreset"></p>
 
       <div class="cby-label">Colour map by</div>
       <div class="cby" id="colorByChips"></div>
 
       <label class="ctl ctl-min">Hide weaker areas below <b id="minVal">0</b>
-        <input type="range" id="minScore" min="0" max="90" value="0" /></label>
+        <input type="range" id="minScore" min="0" max="90" value="0" title="Fade every area scoring below this value" /></label>
       <label class="elec-toggle"><input type="checkbox" id="elecToggle" />
         ⚡ Show electricity network <span class="muted">(transmission lines + substations)</span></label>
     </div>
@@ -75,6 +76,7 @@
 
   <main id="mapwrap">
     <div id="map"></div>
+    <button id="howtoBtn" class="howto-btn" type="button">ⓘ&nbsp; How to read this map</button>
     <div id="legend" class="legend"></div>
     <div id="hovercard" class="hovercard hidden"></div>
   </main>
@@ -83,91 +85,197 @@
 <div id="aboutModal" class="modal hidden">
   <div class="modal-box card">
     <button class="close" id="aboutClose" aria-label="Close">×</button>
-    <h2>Guide &amp; key</h2>
-    <p>Every <b>Greater Melbourne suburb</b> (ABS SA2) is ranked against all others on each input
-       (0–100, higher = better), then blended into two scores plus a slider-controlled overall.</p>
+    <h2>Guide &amp; data sources</h2>
+    <p class="modal-intro">Liveable Melbourne scores all <b>361 Greater Melbourne suburbs</b>
+       (ABS areas) from <b>0–100</b> on two things — how good they are to <b>live in</b>, and their
+       <b>potential to invest in or develop</b>. Higher is always better; neither goal is “better”
+       than the other — it depends what you’re looking for.</p>
     <p class="methodstate" id="methodState"></p>
 
-    <h3>How to use it</h3>
-    <ol class="guide-steps">
-      <li>Pick a <b>preset</b> (or a mode) — the map recolours and the list re-ranks instantly.</li>
-      <li>Read the map colour, or the <b>ranked list</b> in the panel.</li>
-      <li><b>Click a suburb</b> for its full scorecard.</li>
-      <li>Tick <b>⚡ Show electricity network</b> to overlay transmission lines + substations.</li>
-    </ol>
-
-    <h3>The two scores</h3>
-    <ul class="keylist">
-      <li><b>🏠 Liveability</b> — where to live or rent. Personal safety + family lead.</li>
-      <li><b>🏗️ Development</b> <span class="prelim">preliminary</span> — where to invest/build. Headroom, growth, grid support.</li>
-      <li><b>⚖️ Overall</b> — the slider blends the two; a preset sets a starting point.</li>
-    </ul>
-
-    <h3>Map colour &amp; grade</h3>
-    <div class="scalekey">
-      <span class="muted">worse</span>
-      <div class="bands"><i style="background:#d7263d"></i><i style="background:#f08c2e"></i><i style="background:#f3c613"></i><i style="background:#5bbf3a"></i><i style="background:#1f8a3b"></i></div>
-      <span class="muted">better</span>
-    </div>
-    <p class="muted">Score 0–100. The palette shifts with the mode — calm green in Live, blue→gold in
-       Invest. The map's bottom-right legend always shows the current scale.</p>
-    <div class="grades-key">
-      <span><i style="background:#248a3d"></i>A+ / A excellent</span>
-      <span><i style="background:#e0a400"></i>B good</span>
-      <span><i style="background:#ff9500"></i>C fair</span>
-      <span><i style="background:#ff3b30"></i>D weak</span>
+    <div class="gtabs" id="guideTabs">
+      <button data-tab="start" class="on">Start here</button>
+      <button data-tab="map">Reading the map</button>
+      <button data-tab="scores">Scores &amp; criteria</button>
+      <button data-tab="data">Data &amp; sources</button>
     </div>
 
-    <h3>Presets <span class="muted">(one click sets the blend + palette)</span></h3>
-    <ul class="keylist">
-      <li><b>Family first</b> <span class="muted">85 / 15</span> — safe, settled place to raise kids.</li>
-      <li><b>Pure safety</b> <span class="muted">95 / 5</span> — personal safety above all else.</li>
-      <li><b>Balanced investor</b> <span class="muted">45 / 55</span> — all-round buy-and-hold that's still liveable.</li>
-      <li><b>Value-add / developer</b> <span class="muted">20 / 80</span> — redevelopment headroom + growth corridors.</li>
-    </ul>
+    <!-- TAB: start -->
+    <div class="gtab" data-panel="start">
+      <h3>The two scores, in plain English</h3>
+      <div class="sk-list">
+        <div class="sk-item"><div class="sk-ico" style="background:#2e9e5b">🏠</div>
+          <div><b>Liveability</b><span>How good is it to <b>live or rent</b> here right now? Built
+            from personal safety, socio-economic advantage and a settled housing mix.</span></div></div>
+        <div class="sk-item"><div class="sk-ico" style="background:#2f6df0">🏗️</div>
+          <div><b>Development potential</b> <span class="prelim">preliminary</span>
+            <span>How much room is there to <b>add value</b> — build, subdivide or invest? Built from
+            low-density housing, recent price growth and electricity-grid support.</span></div></div>
+        <div class="sk-item"><div class="sk-ico" style="background:#8a8a8e">⚖️</div>
+          <div><b>Overall</b><span>A blend of the two. The slider sets the mix; a preset picks it for you.</span></div></div>
+      </div>
 
-    <h3 id="liveHead">Liveability — <span class="muted">can you live/rent here safely?</span></h3>
-    <ul class="wlist" id="liveWeights"></ul>
-    <p class="muted" id="liveNote">Personal safety (assault, robbery, sexual offences) is weighted far
-       above property crime, which is shown separately for transparency.</p>
+      <h3>Use it in 10 seconds</h3>
+      <ol class="guide-steps">
+        <li>Tap a <b>“Show me the best”</b> button, or a <b>preset</b> — the map recolours and the list re-ranks.</li>
+        <li>Higher-scoring areas stand out in colour. Skim the <b>ranked list</b> in the panel.</li>
+        <li><b>Click any suburb</b> for its full scorecard and plain-English read-outs.</li>
+      </ol>
 
-    <h3>Family suitability <span class="muted">(badge)</span></h3>
-    <ul class="wlist" id="famWeights"></ul>
-
-    <h3>Development potential <span class="prelim">preliminary</span></h3>
-    <ul class="wlist" id="devWeights"></ul>
-    <p class="muted">Room to add value: redevelopment headroom + <b>recent capital growth</b>
-       (Valuer-General 3-year CAGR) + <b>electricity-network support</b> (Geoscience Australia —
-       proximity to transmission lines &amp; substations; a connection-feasibility proxy, since true
-       spare capacity is commercially sensitive). The <b>Market &amp; Price</b> and
-       <b>Infrastructure</b> blocks lead in Invest/Develop modes. <b>Still to come:</b> planning
-       zoning &amp; overlays.</p>
-
-    <h3>Chips you'll see</h3>
-    <ul class="keylist">
-      <li><b>Very safe / Safe</b> — low personal-crime rate</li>
-      <li><b>Family-friendly</b> — kids + education + safety</li>
-      <li><b>Blue-chip</b> — affluent and very safe</li>
-      <li><b>Growth corridor</b> — new family-estate growth area</li>
-      <li><b>Grid-ready</b> — strong electricity-network support</li>
-      <li><b>Premium / Affordable upside</b> — price band</li>
-    </ul>
-
-    <h3>Electricity overlay <span class="muted">(⚡ toggle on the map)</span></h3>
-    <div class="elec-key">
-      <span><i class="line" style="background:#e5484d"></i>500 kV transmission</span>
-      <span><i class="line" style="background:#f76808"></i>220 kV transmission</span>
-      <span><i class="line" style="background:#2a78d6"></i>66 kV line</span>
-      <span><i class="dot" style="background:#e6a700"></i>Substation</span>
+      <h3>Slider, modes &amp; presets</h3>
+      <ul class="keylist">
+        <li><b>Slider</b> — drag Liveability ↔ Development to weight the <b>Overall</b> score.</li>
+        <li><b>Modes</b> (Live / Balanced / Invest) — change the colour palette; Live mode also leans the
+          liveability weighting toward families.</li>
+        <li><b>Presets</b> — one tap sets the slider, palette and map colour for a goal.</li>
+        <li><b>Show me the best</b> — highlights the top ~20 areas for living, investing or developing.</li>
+      </ul>
     </div>
-    <p class="muted">Closer to lines + more substations nearby = easier/cheaper to connect new
-       development. Proximity is a proxy — true spare capacity isn't public.</p>
 
-    <h3>Data sources (all free / public)</h3>
-    <ul id="sourceList" class="sources"></ul>
-    <p class="caveat"><b>Crime is published per Local Government Area</b>, so all suburbs in an LGA
-       share its rate — a quiet pocket can inherit a busy retail strip's crime. Suburb-level crime is
-       a planned refinement. General information only; not financial or planning advice.</p>
+    <!-- TAB: reading the map -->
+    <div class="gtab hidden" data-panel="map">
+      <h3>Map colour = the score (0–100)</h3>
+      <div class="scalekey">
+        <span class="muted">lower</span>
+        <div class="bands"><i style="background:#d7263d"></i><i style="background:#f08c2e"></i><i style="background:#f3c613"></i><i style="background:#5bbf3a"></i><i style="background:#1f8a3b"></i></div>
+        <span class="muted">higher</span>
+      </div>
+      <p class="muted">The palette shifts with the mode so the feel matches your goal —
+        <b>Balanced</b> red→green, <b>Live</b> calm greens, <b>Invest</b> blue→gold. The map’s
+        bottom-right legend always shows the current scale and what it’s colouring.</p>
+
+      <h3>Letter grades (on each scorecard)</h3>
+      <div class="grades-key">
+        <span><i style="background:#248a3d"></i>A+ / A excellent</span>
+        <span><i style="background:#e0a400"></i>B good</span>
+        <span><i style="background:#ff9500"></i>C fair</span>
+        <span><i style="background:#ff3b30"></i>D weak</span>
+      </div>
+
+      <h3>Colour the map by one thing</h3>
+      <ul class="keylist two-col">
+        <li><b>Overall / Liveability / Development</b> — the headline scores.</li>
+        <li><b>Safety</b> — personal-crime rate (greener = lower).</li>
+        <li><b>Socio-economic</b> — ABS SEIFA advantage.</li>
+        <li><b>Family</b> — the family-suitability score.</li>
+        <li><b>Price growth</b> — recent 3-year capital growth.</li>
+        <li><b>Grid</b> — electricity-network support.</li>
+      </ul>
+
+      <h3>Other controls</h3>
+      <ul class="keylist">
+        <li><b>Hide weaker areas below</b> — drag to fade everything under a score, so only stronger areas remain.</li>
+        <li><b>⚡ Show electricity network</b> — overlays the real transmission lines and substations.</li>
+      </ul>
+      <h4>Electricity overlay key</h4>
+      <div class="elec-key">
+        <span><i class="line" style="background:#e5484d"></i>500 kV transmission</span>
+        <span><i class="line" style="background:#f76808"></i>220 kV transmission</span>
+        <span><i class="line" style="background:#2a78d6"></i>66 kV line</span>
+        <span><i class="dot" style="background:#e6a700"></i>Substation</span>
+      </div>
+    </div>
+
+    <!-- TAB: scores & criteria -->
+    <div class="gtab hidden" data-panel="scores">
+      <h3>What makes a score high or low?</h3>
+      <div class="crit">
+        <div class="crit-row"><span class="crit-h crit-live">High Liveability</span>
+          lower personal-crime rate · higher socio-economic advantage (SEIFA) · more settled,
+          owner-occupied housing<span class="crit-fam"> · (Live mode) more children &amp; schools nearby</span></div>
+        <div class="crit-row"><span class="crit-h crit-dev">High Development</span>
+          more low-density detached housing (room to redevelop) · stronger recent price growth ·
+          better electricity-grid support · more rental turnover</div>
+        <div class="crit-row muted">A low score is simply the opposite of these — it isn’t “bad”.
+          A quiet, built-up blue-chip suburb scores high to live and low to develop; a new outer
+          estate often does the reverse.</div>
+      </div>
+      <p class="muted">Every input is <b>ranked against all other Melbourne suburbs</b> (a 0–100
+        percentile), so a score is <b>relative to Melbourne</b>, not an absolute rating.</p>
+
+      <h3 id="liveHead">Liveability — <span class="muted">standard weighting</span></h3>
+      <ul class="wlist" id="liveWeights"></ul>
+      <p class="muted" id="liveNote"></p>
+      <h4>Family suitability <span class="muted">(the 👶 badge)</span></h4>
+      <ul class="wlist" id="famWeights"></ul>
+      <h4>Development potential <span class="prelim">preliminary</span></h4>
+      <ul class="wlist" id="devWeights"></ul>
+
+      <h3>Chips &amp; terms you’ll see</h3>
+      <dl class="glossary">
+        <dt>Very safe / Safe</dt><dd>Lower rate of crimes against the person than most Melbourne suburbs.</dd>
+        <dt>Blue-chip</dt><dd>High socio-economic advantage and very low personal crime.</dd>
+        <dt>Affluent</dt><dd>High socio-economic advantage (SEIFA decile 8+).</dd>
+        <dt>Family-friendly</dt><dd>High family-suitability score — children, schools and safety combined.</dd>
+        <dt>Growth corridor</dt><dd>High development potential with many children — typically a new outer estate.</dd>
+        <dt>Grid-ready</dt><dd>Strong electricity-network support nearby (close to lines + substations).</dd>
+        <dt>Redevelopment headroom</dt><dd>A high share of low-density detached houses — more room to rebuild or subdivide.</dd>
+        <dt>High rental demand</dt><dd>A high share of rented dwellings.</dd>
+        <dt>Tightly held</dt><dd>Mostly owner-occupied with little renting — low turnover.</dd>
+        <dt>Low density / Built-up</dt><dd>Fewer / more people per km² than most suburbs.</dd>
+        <dt>Strong growth</dt><dd>Strong recent 3-year median price growth.</dd>
+        <dt>Affordable upside</dt><dd>Below-median prices alongside development potential.</dd>
+        <dt>Premium market</dt><dd>Above-median prices.</dd>
+        <dt class="muted">Family badge</dt><dd class="muted">“Family-friendly / OK for families / Less family-oriented” — the family-suitability band.</dd>
+      </dl>
+    </div>
+
+    <!-- TAB: data & sources -->
+    <div class="gtab hidden" data-panel="data">
+      <h3>Where the data comes from</h3>
+      <div class="srcblocks">
+        <div class="srcblock" style="--accent:#8a8a8e"><div class="sb-ico">🗺️</div>
+          <div><div class="sb-h">Suburb boundaries <span class="sb-src">ABS SA2 (2021)</span></div>
+            <p>The ~suburb-sized areas every score is attached to (361 across Greater Melbourne).</p></div></div>
+
+        <div class="srcblock" style="--accent:#e24b4a"><div class="sb-ico">🛡️</div>
+          <div><div class="sb-h">Crime <span class="sb-src">Crime Statistics Agency Victoria</span></div>
+            <p>Recorded offences (year ending Mar 2026), split into <b>crimes against the person</b>
+              (assault, robbery, sexual offences) and <b>property crime</b>. Published per council
+              (LGA), so suburbs in one council currently share a rate.</p></div></div>
+
+        <div class="srcblock" style="--accent:#7f77dd"><div class="sb-ico">📊</div>
+          <div><div class="sb-h">Socio-economic <span class="sb-src">ABS SEIFA 2021</span></div>
+            <p>A relative measure of an area’s advantage/disadvantage (IRSAD) and education &amp;
+              occupation (IEO). Higher decile = more advantaged, relative to Australia.</p></div></div>
+
+        <div class="srcblock" style="--accent:#1d9e75"><div class="sb-ico">🏘️</div>
+          <div><div class="sb-h">Housing &amp; family <span class="sb-src">ABS Census 2021</span></div>
+            <p>Owner-occupier vs renter mix, detached houses vs apartments, and the share of children
+              aged 0–14 — used for housing stability, redevelopment headroom and family signals.</p></div></div>
+
+        <div class="srcblock" style="--accent:#0a6fd8"><div class="sb-ico">💰</div>
+          <div><div class="sb-h">Property prices &amp; growth <span class="sb-src">Victorian Valuer-General · Land.Vic</span></div>
+            <p>Median house &amp; unit sale prices (10-year series). We show the latest median,
+              12-month change and 3-year growth. 3-year growth is the figure used in scoring (it
+              smooths small-sample swings).</p></div></div>
+
+        <div class="srcblock" style="--accent:#eda100"><div class="sb-ico">⚡</div>
+          <div><div class="sb-h">Electricity infrastructure <span class="sb-src">AEMO &amp; Geoscience Australia</span></div>
+            <p>National transmission lines and substations. We use <b>distance to the grid</b> and
+              <b>substation density</b> as practical signals of how feasible a larger connection is.
+              <b>Note:</b> detailed substation spare capacity is generally not public, so proximity and
+              density are proxies — they indicate support, not a guaranteed connection.</p></div></div>
+      </div>
+
+      <h3>What’s preliminary / coming next</h3>
+      <ul class="keylist">
+        <li><b>Development potential is preliminary</b> — it shows feasibility signals, not a forecast,
+          and not a guarantee you can build.</li>
+        <li><b>Not yet included:</b> planning zoning &amp; overlays (e.g. <b>VICPLAN</b> — what each lot
+          is actually zoned for, plus heritage / flood / bushfire overlays), rental yields, and
+          address-level detail.</li>
+        <li><b>Crime is council-level</b>, not suburb-level — a planned refinement.</li>
+      </ul>
+
+      <details class="rawsrc"><summary>Exact source files used in this build</summary>
+        <ul id="sourceList" class="sources"></ul>
+        <p class="muted" id="genline2"></p>
+      </details>
+
+      <p class="caveat"><b>General information only.</b> Built from public data and provided as-is —
+        not financial, legal or planning advice. Always check the planning scheme and do your own
+        due diligence before acting.</p>
+    </div>
   </div>
 </div>
 
