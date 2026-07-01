@@ -58,6 +58,7 @@ body{font:15px/1.45 var(--sans);color:var(--ink);background:var(--map-bg);
   padding:8px 14px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--sans)}
 .tb-btn:hover{border-color:var(--accent);color:var(--accent)}
 .tb-search{position:relative}
+.search-tog{display:none}                    /* mobile-only search toggle */
 .tb-search input{width:190px;border:1px solid var(--line);background:var(--chip);color:var(--ink);
   border-radius:11px;padding:8px 12px;font-size:13px;outline:none;font-family:var(--sans)}
 .tb-search input:focus{border-color:var(--accent);width:230px}
@@ -279,7 +280,15 @@ button,.preset,.cby button,.best-btn,.about-tab{transition:transform .1s ease,ba
   .glass{-webkit-backdrop-filter:blur(13px) saturate(1.2);backdrop-filter:blur(13px) saturate(1.2)}
   .brand .bname{display:none}
   #topbar{left:8px;right:8px;top:8px;gap:7px;padding:0 8px;height:52px}
-  .tb-btn,.tb-search{display:none}          /* Guide via legend "?"; search via list/map on mobile */
+  .tb-btn{display:none}                     /* Guide via legend "?" on mobile */
+  /* search collapses to a magnifier button; tapping it opens a full-width bar under the topbar */
+  .search-tog{display:flex}
+  .tb-search{display:none}
+  #topbar.search-open .tb-search{display:block;position:fixed;left:8px;right:8px;top:68px;z-index:610}
+  #topbar.search-open .tb-search input,#topbar.search-open .tb-search input:focus{width:100%;padding:11px 14px;
+    font-size:16px;background:var(--glass-solid);box-shadow:var(--shadow)}
+  #topbar.search-open #results{max-height:46vh;overflow:auto}
+  #topbar.search-open .search-tog{border-color:var(--accent);color:var(--accent)}
   .seg.modes{flex:1}
   .seg.modes button{flex:1;padding:8px 6px}
   .tb-right{margin-left:0}
