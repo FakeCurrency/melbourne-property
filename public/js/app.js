@@ -346,16 +346,24 @@
 
   // ---- search -----------------------------------------------------------
   const search = document.getElementById("search"), results = document.getElementById("results");
+  const topbar = document.getElementById("topbar");
+  const closeSearch = () => { topbar.classList.remove("search-open"); results.innerHTML = ""; search.blur(); };
   search.oninput = () => {
     const q = search.value.trim().toLowerCase(); results.innerHTML = "";
     if (!q) return;
     entries.filter(([, a]) => a.name.toLowerCase().includes(q)).slice(0, 8).forEach(([code, a]) => {
       const d = document.createElement("div"); d.className = "res";
       d.innerHTML = `<span>${a.name}</span><small>${a.lga || ""}</small>`;
-      d.onclick = () => { select(code, true); search.value = a.name; results.innerHTML = ""; };
+      d.onclick = () => { select(code, true); search.value = a.name; closeSearch(); };
       results.appendChild(d);
     });
   };
+  // mobile: the topbar magnifier expands the search into a full-width bar
+  document.getElementById("searchTog").onclick = () => {
+    if (topbar.classList.toggle("search-open")) { search.value = ""; results.innerHTML = ""; search.focus(); }
+    else closeSearch();
+  };
+  map.on("click", closeSearch);
 
   // ---- electricity network overlay (the "AEMO map" layer) ---------------
   let elecLayer = null;
@@ -402,7 +410,7 @@
   document.getElementById("howtoBtn").onclick = () => openGuide("start");
   modal.querySelectorAll("#closeAbout, #closeAbout2").forEach(b => b.onclick = closeGuide);
   modal.onclick = e => { if (e.target === modal) closeGuide(); };
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeGuide(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeGuide(); closeSearch(); } });
 
   // ---- init -------------------------------------------------------------
   setTheme(localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
