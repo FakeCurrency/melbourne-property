@@ -1,95 +1,101 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Liveable Melbourne — live, invest &amp; develop scores by suburb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-<div id="app">
-  <aside id="panel">
-    <header class="brand">
-      <div>
-        <h1>Liveable&nbsp;Melbourne</h1>
-        <p class="tag">Every suburb scored to live, invest &amp; develop</p>
-      </div>
-      <button id="theme" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">◑</button>
-    </header>
 
-    <div class="best-h">Show me the best…</div>
-    <div class="best-row" id="bestRow">
-      <button class="best-btn" data-kind="live" title="Highlights the safest, most liveable suburbs (top ~20)"><span class="bi">🏡</span>Best to live</button>
-      <button class="best-btn" data-kind="invest" title="Highlights the strongest recent price growth (top ~20)"><span class="bi">📈</span>Best to invest</button>
-      <button class="best-btn" data-kind="develop" title="Highlights the most room to build / subdivide (top ~20)"><span class="bi">🏗️</span>Best to develop</button>
-    </div>
-    <p class="best-cap">Each highlights the <b>top ~20 areas</b> for that goal and fades the rest.</p>
+<!-- full-bleed map canvas -->
+<div id="map"></div>
 
-    <!-- audience modes -->
-    <div class="seg modes" id="modeSeg">
-      <button data-mode="live" title="Calm green palette; leans liveability toward families"><span class="dot live"></span>Live</button>
-      <button data-mode="balanced" class="on" title="Neutral 50/50 view across liveability and development"><span class="dot bal"></span>Balanced</button>
-      <button data-mode="invest" title="Blue→gold palette; emphasises development and growth"><span class="dot inv"></span>Invest / Develop</button>
-    </div>
-    <p class="modecopy" id="modeCopy"></p>
+<!-- floating command bar -->
+<header id="topbar" class="glass">
+  <button class="tb-icon dock-tog" title="Show / hide controls"
+          onclick="document.getElementById('dock').classList.toggle('collapsed')">≡</button>
+  <div class="brand"><span class="mark">◈</span><span class="bname">Liveable&nbsp;Melbourne</span></div>
 
-    <div class="presets-h">One-click presets</div>
-    <div class="presets" id="presetRow"></div>
+  <div class="seg modes" id="modeSeg">
+    <button data-mode="live" title="Calm palette; leans liveability toward families">Live</button>
+    <button data-mode="balanced" class="on" title="Neutral 50/50 view">Balanced</button>
+    <button data-mode="invest" title="Emphasises development &amp; growth">Invest</button>
+  </div>
 
-    <div class="card controls">
-      <div class="blend-row">
-        <span>Liveability</span><span class="blend-val"><b id="wLive">50</b>% / <b id="wDev">50</b>%</span><span>Development</span>
-      </div>
-      <input type="range" id="blend" min="0" max="100" value="50" title="Weight the Overall score between Liveability and Development" />
-      <p class="active-preset" id="activePreset"></p>
-
-      <div class="cby-label">Colour map by</div>
-      <div class="cby" id="colorByChips"></div>
-
-      <label class="ctl ctl-min">Hide weaker areas below <b id="minVal">0</b>
-        <input type="range" id="minScore" min="0" max="90" value="0" title="Fade every area scoring below this value" /></label>
-      <label class="elec-toggle"><input type="checkbox" id="elecToggle" />
-        ⚡ Show electricity network <span class="muted">(transmission lines + substations)</span></label>
-    </div>
-
-    <div class="search card">
-      <input type="search" id="search" placeholder="Search a suburb…" autocomplete="off" />
+  <div class="tb-right">
+    <div class="tb-search">
+      <input id="search" type="search" placeholder="Search a suburb…" autocomplete="off" />
       <div id="results"></div>
     </div>
+    <button id="aboutBtn" class="tb-btn">Guide</button>
+    <button id="theme" class="tb-icon" title="Toggle dark / light" aria-label="Toggle theme">◑</button>
+  </div>
+</header>
 
-    <section id="scorecard" class="card empty">
-      <p class="placeholder">Pick a suburb on the map, search, or tap the list to see its full scorecard.</p>
-    </section>
+<!-- floating control dock -->
+<aside id="dock" class="glass">
+  <div class="dock-sec">
+    <div class="sec-h">Show me the best</div>
+    <div class="best-row" id="bestRow">
+      <button class="best-btn" data-kind="live" title="Safest, most liveable (top ~20)"><span class="bi">🏡</span>Live</button>
+      <button class="best-btn" data-kind="invest" title="Strongest recent price growth (top ~20)"><span class="bi">📈</span>Invest</button>
+      <button class="best-btn" data-kind="develop" title="Most room to build / subdivide (top ~20)"><span class="bi">🏗️</span>Develop</button>
+    </div>
+    <p class="best-cap">Highlights the <b>top ~20</b> for each goal.</p>
+  </div>
 
-    <section class="card lists" id="listsCard">
-      <div class="lists-head">Top suburbs by <b id="listLabel">Overall</b></div>
-      <ol id="topList" class="ranklist"></ol>
-    </section>
+  <div class="dock-sec">
+    <div class="sec-h">One-click presets</div>
+    <div class="presets" id="presetRow"></div>
+  </div>
 
-    <footer class="meta">
-      <button id="aboutBtn" class="link">Guide, key &amp; data sources</button>
-      <span id="genline"></span>
-    </footer>
-  </aside>
+  <div class="dock-sec">
+    <div class="blend-row"><span>Liveability</span>
+      <span class="blend-val"><b id="wLive">50</b>% / <b id="wDev">50</b>%</span><span>Development</span></div>
+    <input type="range" id="blend" min="0" max="100" value="50" title="Weight the Overall score" />
+    <p class="active-preset" id="activePreset"></p>
 
-  <main id="mapwrap">
-    <div id="map"></div>
-    <button id="howtoBtn" class="howto-btn" type="button">ⓘ&nbsp; How to read this map</button>
-    <div id="legend" class="legend"></div>
-    <div id="hovercard" class="hovercard hidden"></div>
-  </main>
-</div>
+    <div class="cby-label">Colour map by</div>
+    <div class="cby" id="colorByChips"></div>
+
+    <label class="ctl ctl-min">Hide weaker areas below <b id="minVal">0</b>
+      <input type="range" id="minScore" min="0" max="90" value="0" title="Fade areas below this score" /></label>
+    <label class="elec-toggle"><input type="checkbox" id="elecToggle" />
+      ⚡ Show electricity network</label>
+  </div>
+
+  <p class="modecopy" id="modeCopy"></p>
+</aside>
+
+<!-- floating info panel: scorecard + ranked list -->
+<aside id="infopanel" class="glass">
+  <section id="scorecard" class="empty">
+    <p class="placeholder">Pick a suburb on the map, search, or tap the list to see its full scorecard.</p>
+  </section>
+  <section class="lists" id="listsCard">
+    <div class="lists-head">Top suburbs by <b id="listLabel">Overall</b></div>
+    <ol id="topList" class="ranklist"></ol>
+  </section>
+  <div class="panel-foot"><span id="genline"></span></div>
+</aside>
+
+<div id="legend" class="legend glass"></div>
+<div id="hovercard" class="hovercard hidden"></div>
+<button id="howtoBtn" hidden></button>
 
 <div id="aboutModal" class="modal hidden" aria-hidden="true">
-  <div class="modal-content about-modal">
+  <div class="modal-content about-modal glass">
     <div class="modal-head">
       <h2>How to use Liveable Melbourne</h2>
       <button class="close-btn" id="closeAbout" aria-label="Close">×</button>
     </div>
 
-    <!-- Tabs -->
     <div class="about-tabs">
       <button class="about-tab active" data-tab="start">Start here</button>
       <button class="about-tab" data-tab="map">Reading the map</button>
@@ -97,7 +103,6 @@
       <button class="about-tab" data-tab="sources">Data &amp; sources</button>
     </div>
 
-    <!-- TAB 1: Start here -->
     <div id="tab-start" class="about-panel active">
       <div class="about-intro">
         <p><strong>This tool helps you compare Melbourne suburbs</strong> across two main goals:</p>
@@ -105,42 +110,38 @@
           <li><strong>Live or rent</strong> — where is it safer and more stable for you or your family?</li>
           <li><strong>Invest or develop</strong> — where is there genuine potential for growth or redevelopment?</li>
         </ul>
-        <p>You can switch between views using the mode buttons and presets at the top of the panel. Everything updates instantly.</p>
+        <p>Switch views using the mode buttons and presets. Everything updates instantly.</p>
       </div>
       <div class="quick-tips">
         <h4>Quick tips</h4>
         <ul>
           <li>Click any suburb on the map or in the list to see its full scorecard.</li>
-          <li>Use the slider to blend Liveability and Development Potential however you like.</li>
-          <li>Try the one-click presets (Family First, Balanced Investor, Value-Add/Developer) to jump to different viewpoints.</li>
-          <li>Toggle the electricity network layer to see transmission lines and substations.</li>
+          <li>Use the slider to blend Liveability and Development Potential.</li>
+          <li>Try the one-click presets (Family First, Balanced Investor, Value-Add/Developer).</li>
+          <li>Toggle the electricity network to see transmission lines and substations.</li>
         </ul>
       </div>
     </div>
 
-    <!-- TAB 2: Reading the map -->
     <div id="tab-map" class="about-panel">
       <h4>Colouring the map</h4>
-      <p>The map colour changes depending on what you select:</p>
+      <p>The map colour changes with what you select:</p>
       <ul>
         <li><strong>Live mode</strong> — emphasises safety, socio-economic advantage and family-friendly areas (green tones).</li>
         <li><strong>Balanced mode</strong> — a 50/50 mix of liveability and development potential.</li>
         <li><strong>Invest / Develop mode</strong> — highlights redevelopment headroom, price growth and infrastructure support (blue-gold tones).</li>
       </ul>
-
       <h4>Key controls</h4>
       <ul>
-        <li><strong>Slider</strong>: Adjust how much weight you give to Liveability vs Development Potential.</li>
-        <li><strong>Colour by</strong>: Change what the map colours represent (Overall, Liveability, Development, Growth, Grid, etc.).</li>
-        <li><strong>Hide weaker areas</strong>: Slide the minimum score filter to focus only on stronger suburbs.</li>
-        <li><strong>Electricity overlay</strong>: Toggle to show major transmission lines and substations.</li>
+        <li><strong>Slider</strong>: how much weight you give Liveability vs Development.</li>
+        <li><strong>Colour by</strong>: what the map colours represent (Overall, Safety, Growth, Grid…).</li>
+        <li><strong>Hide weaker areas</strong>: focus only on stronger suburbs.</li>
+        <li><strong>Electricity overlay</strong>: show major transmission lines and substations.</li>
       </ul>
     </div>
 
-    <!-- TAB 3: Scores & criteria -->
     <div id="tab-criteria" class="about-panel">
       <h4>What the scores mean (plain English)</h4>
-
       <div class="criteria-block">
         <h5>Liveability Score</h5>
         <p>Higher = better for living or renting. Combines:</p>
@@ -151,24 +152,21 @@
           <li>Higher share of families with children (in Family mode)</li>
         </ul>
       </div>
-
       <div class="criteria-block">
         <h5>Development Potential Score</h5>
-        <p>Higher = more signals that the area may have room to grow or be redeveloped. Combines:</p>
+        <p>Higher = more signals the area may have room to grow or be redeveloped. Combines:</p>
         <ul>
           <li>Higher proportion of detached houses (redevelopment headroom)</li>
           <li>Recent price growth momentum</li>
           <li>Closer proximity to major electricity transmission infrastructure</li>
           <li>Higher rental turnover (investor activity)</li>
         </ul>
-        <p class="note">This score is still preliminary — it does not yet include full planning zoning or overlays.</p>
+        <p class="note">Still preliminary — it does not yet include full planning zoning or overlays.</p>
       </div>
-
       <div class="criteria-block">
         <h5>Overall Score</h5>
         <p>A blend of the two scores above. You control the balance with the slider or presets.</p>
       </div>
-
       <h4>Chip &amp; term glossary</h4>
       <div class="glossary">
         <div><strong>Very safe / Safe</strong> — Low rates of personal crime</div>
@@ -182,41 +180,34 @@
       </div>
     </div>
 
-    <!-- TAB 4: Data & sources -->
     <div id="tab-sources" class="about-panel">
       <h4>Where the data comes from</h4>
-
       <div class="source-block">
-        <h5>Electricity Infrastructure (current layer)</h5>
+        <h5>Electricity Infrastructure</h5>
         <p><strong>Geoscience Australia</strong> — National Electricity Transmission Lines and Substations (2024).
-        Proximity to major transmission lines and density of substations within 10 km are used as practical signals for development feasibility. Detailed substation capacity data is generally not publicly available.</p>
-        <p class="note">AEMO context is referenced for the broader electricity network; actual geometry comes from Geoscience Australia.</p>
+        Proximity to transmission lines and density of substations within 10 km are used as practical signals for development feasibility. Detailed substation capacity data is generally not publicly available.</p>
+        <p class="note">AEMO context is referenced for the broader electricity network; geometry comes from Geoscience Australia.</p>
       </div>
-
       <div class="source-block">
         <h5>Property Prices &amp; Growth</h5>
-        <p><strong>Victorian Valuer-General / Land.Vic</strong> — Median house and unit prices by suburb (time series 2014–2024). 12-month change and 3-year compound annual growth rate are calculated from this data.</p>
+        <p><strong>Victorian Valuer-General / Land.Vic</strong> — Median house and unit prices by suburb (2014–2024). 12-month change and 3-year CAGR are calculated from this data.</p>
       </div>
-
       <div class="source-block">
         <h5>Liveability inputs</h5>
         <ul>
           <li><strong>Crime Statistics Agency Victoria (CSA)</strong> — Recorded offences by LGA, split into crimes against the person vs property crime (year ending March 2026).</li>
-          <li><strong>Australian Bureau of Statistics (ABS)</strong> — SEIFA 2021 (IRSAD &amp; IEO), Census 2021 housing tenure/structure (G37), and age demographics (G01).</li>
+          <li><strong>Australian Bureau of Statistics (ABS)</strong> — SEIFA 2021 (IRSAD &amp; IEO), Census 2021 housing (G37) and age demographics (G01).</li>
         </ul>
       </div>
-
       <div class="source-block">
         <h5>Geography</h5>
         <p><strong>ABS ASGS Edition 3 (2021)</strong> — Statistical Area Level 2 (SA2) boundaries for Greater Melbourne.</p>
       </div>
-
       <div class="note-box">
         <strong>What’s still preliminary / coming next</strong><br>
-        The Development Potential score currently uses housing form, price growth, and electricity proximity. It does <strong>not yet</strong> include full planning controls (zoning, overlays, height limits) from <strong>VICPLAN / Vicmap Planning</strong>. Those layers are planned for a future update and will significantly improve the accuracy of development feasibility signals.
+        Development Potential currently uses housing form, price growth and electricity proximity. It does <strong>not yet</strong> include full planning controls (zoning, overlays, height limits) from <strong>VICPLAN / Vicmap Planning</strong>. Those layers are planned next.
       </div>
-
-      <p class="small">All data is public and government-sourced. No commercial or proprietary datasets are used. Scores are percentile-ranked within Greater Melbourne only.</p>
+      <p class="small">All data is public and government-sourced. Scores are percentile-ranked within Greater Melbourne only.</p>
     </div>
 
     <div class="modal-foot">
