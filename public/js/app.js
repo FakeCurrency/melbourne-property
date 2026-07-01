@@ -158,6 +158,10 @@
       ${prominent ? `<p class="market-note">${a.explanation_invest}</p>` : ""}</div>`;
   }
 
+  const IC = {
+    fam: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.6 19a5.4 5.4 0 0 1 10.8 0"/><path d="M16 6.6a3 3 0 0 1 0 5.8M17.4 14a5 5 0 0 1 3 4.6"/></svg>',
+    bolt: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg>',
+  };
   function infraBlock(a, prominent) {
     const i = a.infra, adv = i.advantage.toLowerCase();
     const advCls = adv === "strong" ? "strong" : adv === "moderate" ? "moderate" : "soft";
@@ -166,7 +170,7 @@
       <div class="market-sub">
         <span class="sig sig-${advCls}">${i.advantage} grid support</span>
         ${i.nearest_line_kv ? `<span class="sig sig-val">${i.nearest_line_kv} kV nearby</span>` : ""}</div>
-      <div class="market-sub">⚡ ${i.nearest_transmission_km != null ? i.nearest_transmission_km + " km to transmission" : "—"} · ${i.substation_count_10km} substations &lt;10 km</div>
+      <div class="market-sub icrow">${IC.bolt}${i.nearest_transmission_km != null ? i.nearest_transmission_km + " km to transmission" : "—"} · ${i.substation_count_10km} substations &lt;10 km</div>
       ${prominent ? `<p class="market-note">${a.explanation_infra}</p>` : ""}</div>`;
   }
 
@@ -174,7 +178,7 @@
     const a = A[code]; if (!a) return;
     const p = a.pillars, m = a.market, lv = liveOf(a), ov = overallOf(a);
     const prominent = mode !== "live";          // price leads in Balanced/Invest, light in Live
-    const chips = [`<span class="chip fam">👶 ${a.family.label} ${a.family.score}</span>`]
+    const chips = [`<span class="chip fam">${IC.fam} ${a.family.label} ${a.family.score}</span>`]
       .concat(a.tags.map(t => `<span class="chip">${t}</span>`)).join("");
     const liveLab = mode === "live" ? "Liveability ·family" : "Liveability";
     sc.classList.remove("empty");
@@ -185,7 +189,7 @@
         <span class="grade" style="background:${gradeColor(a.grade)}">${a.grade}</span>
       </div>
       <div class="chips">${chips}</div>
-      <p class="bestfor">⭐ <b>Best for:</b> ${bestFor(a)}.</p>
+      <p class="bestfor"><b>Best for:</b> ${bestFor(a)}.</p>
       <div class="bigrow">
         <div class="big" style="background:${rampColor(lv, "live")}"><div class="lab">${liveLab}</div><div class="num">${lv}</div></div>
         <div class="big" style="background:${rampColor(a.dev, "invest")}"><div class="lab">Development</div><div class="num">${a.dev}</div></div>
@@ -208,6 +212,7 @@
       <p class="summary">${a.explanation_live}</p>
       <p class="summary dev">${a.explanation_dev}</p>
       ${prominent ? "" : marketBlock(a, false) + infraBlock(a, false)}`;
+    sc.classList.remove("pop"); void sc.offsetWidth; sc.classList.add("pop");  // re-trigger fade-in
   }
 
   function select(code, fly) {
@@ -309,13 +314,20 @@
     overall: "Overall", live: "Liveability", dev: "Development", family: "Family suitability",
     safety: "Safety (low crime)", seifa: "Socio-economic", growth: "Price growth", grid: "Grid support",
   };
+  const LEGEND_DESC = {
+    overall: "Blend of liveability & development", live: "How good it is to live or rent here",
+    dev: "Room to build, invest or subdivide", safety: "Lower personal-crime rate",
+    seifa: "Socio-economic advantage", family: "How suitable for families",
+    growth: "Recent 3-year price growth", grid: "Electricity-network support",
+  };
   function updateLegend() {
     const el = document.getElementById("legend");
     el.innerHTML =
-      `<div class="lt"><span>${LABELS[colorBy]}${colorBy === "live" && mode === "live" ? " · family" : ""} (0–100)</span>
-         <button class="lg-help" type="button" title="How to read this map">?</button></div>
+      `<div class="lt"><span>Colour&nbsp;=&nbsp;${LABELS[colorBy]}</span>
+         <button class="lg-help" type="button" title="Open the full guide">?</button></div>
        <div class="ramp" style="background:${cssGradient(MODE_RAMP[mode])}"></div>
-       <div class="scalex"><span>lower</span><span>higher</span></div>`;
+       <div class="scalex"><span>lower</span><span>higher</span></div>
+       <div class="lg-desc"><b>${LEGEND_DESC[colorBy]}.</b> Higher is better — tap a suburb for the full story.</div>`;
     el.querySelector(".lg-help").onclick = () => openGuide("map");
   }
   const entries = Object.entries(A);

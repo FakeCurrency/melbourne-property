@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/app.css" />
+<link rel="stylesheet" href="css/app.css?v=7" />
 </head>
 <body>
 
@@ -19,8 +19,8 @@
 <!-- floating command bar -->
 <header id="topbar" class="glass">
   <button class="tb-icon dock-tog" title="Show / hide controls"
-          onclick="document.getElementById('dock').classList.toggle('collapsed')">≡</button>
-  <div class="brand"><span class="mark">◈</span><span class="bname">Liveable&nbsp;Melbourne</span></div>
+          onclick="document.getElementById('dock').classList.toggle('collapsed')" aria-label="Toggle controls"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="brand"><span class="mark"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.5A6.5 6.5 0 1 0 5.5 10.5C5.5 15.2 12 21 12 21Z" fill="currentColor"/><circle cx="12" cy="10.2" r="2.2" fill="#fff"/></svg></span><span class="bname">Liveable&nbsp;Melbourne</span></div>
 
   <div class="seg modes" id="modeSeg">
     <button data-mode="live" title="Calm palette; leans liveability toward families">Live</button>
@@ -34,7 +34,7 @@
       <div id="results"></div>
     </div>
     <button id="aboutBtn" class="tb-btn">Guide</button>
-    <button id="theme" class="tb-icon" title="Toggle dark / light" aria-label="Toggle theme">◑</button>
+    <button id="theme" class="tb-icon" title="Toggle dark / light" aria-label="Toggle theme"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.2A8 8 0 1 1 9.8 4 6.2 6.2 0 0 0 20 14.2Z"/></svg></button>
   </div>
 </header>
 
@@ -43,9 +43,9 @@
   <div class="dock-sec">
     <div class="sec-h">Show me the best</div>
     <div class="best-row" id="bestRow">
-      <button class="best-btn" data-kind="live" title="Safest, most liveable (top ~20)"><span class="bi">🏡</span>Live</button>
-      <button class="best-btn" data-kind="invest" title="Strongest recent price growth (top ~20)"><span class="bi">📈</span>Invest</button>
-      <button class="best-btn" data-kind="develop" title="Most room to build / subdivide (top ~20)"><span class="bi">🏗️</span>Develop</button>
+      <button class="best-btn" data-kind="live" title="Safest, most liveable (top ~20)"><span class="bi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9"/></svg></span>Live</button>
+      <button class="best-btn" data-kind="invest" title="Strongest recent price growth (top ~20)"><span class="bi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Invest</button>
+      <button class="best-btn" data-kind="develop" title="Most room to build / subdivide (top ~20)"><span class="bi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 21V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v16"/><path d="M14 21V9h4a1 1 0 0 1 1 1v11"/><path d="M9 8h2M9 12h2M9 16h2"/></svg></span>Develop</button>
     </div>
     <p class="best-cap">Highlights the <b>top ~20</b> for each goal.</p>
   </div>
@@ -67,7 +67,7 @@
     <label class="ctl ctl-min">Hide weaker areas below <b id="minVal">0</b>
       <input type="range" id="minScore" min="0" max="90" value="0" title="Fade areas below this score" /></label>
     <label class="elec-toggle"><input type="checkbox" id="elecToggle" />
-      ⚡ Show electricity network</label>
+      <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg> Show electricity network</label>
   </div>
 
   <p class="modecopy" id="modeCopy"></p>
@@ -216,8 +216,9 @@
   </div>
 </div>
 
+<script>if (window.innerWidth < 900) document.getElementById('dock').classList.add('collapsed');</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>
