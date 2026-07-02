@@ -194,4 +194,3 @@ if __name__ == "__main__":  # pragma: no cover
         code = next((c for c, n in names.items() if n == nm), None)
         if code:
             print(f"  {nm:24} {r[code]}")
-"""
