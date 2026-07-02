@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # to kick the Pages deploy after committing (bot pushes don't auto-trigger it)
 
 concurrency:
   group: refresh-data
@@ -91,4 +92,9 @@ jobs:
             git commit -m "${{ inputs.restore_sha != '' && format('Restore data from {0}', inputs.restore_sha) || 'Refresh data (automated: ABS, CSA, VG, GA, Vicmap)' }}"
             git pull --rebase origin main
             git push origin main
+            # Pushes made with GITHUB_TOKEN do not trigger other workflows,
+            # so kick the Pages deploy explicitly.
+            gh workflow run pages.yml --ref main
           fi
+        env:
+          GH_TOKEN: ${{ github.token }}
