@@ -4,12 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Melbourne Property — live, invest &amp; develop scores by suburb</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/app.css?v=14" />
+<link rel="stylesheet" href="css/app.css?v=15" />
 </head>
 <body>
 
@@ -72,7 +69,7 @@
       <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg> Show electricity network</label>
     <label class="elec-toggle"><input type="checkbox" id="stnToggle" />
       <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="13" rx="2.5"/><path d="M6 10h12M9.5 16 7 20M14.5 16 17 20"/></svg> Show train stations</label>
-    <button class="w-btn" id="weightsBtn" title="Rebuild the scores with your own pillar weights — everything recomputes live">⚖ Customise weights</button>
+    <button class="w-btn" id="weightsBtn" title="Rebuild the scores with your own pillar weights — everything recomputes live"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h7M15.5 7H20M4 12h2.5M11 12h9M4 17h10M18.5 17H20"/><circle cx="13" cy="7" r="2"/><circle cx="8.5" cy="12" r="2"/><circle cx="16.5" cy="17" r="2"/></svg> Customise weights</button>
   </div>
 
   <p class="modecopy" id="modeCopy"></p>
@@ -143,10 +140,10 @@
           <li>Click any suburb on the map or in the list to see its full scorecard.</li>
           <li>Use the slider to blend Liveability and Development Potential.</li>
           <li>Try the one-click presets (Family First, Balanced Investor, Value-Add/Developer).</li>
-          <li>Hit <strong>⇆ Compare</strong> on a scorecard, then tap a second suburb for a side-by-side.</li>
+          <li>Hit <strong>Compare</strong> on a scorecard, then tap a second suburb for a side-by-side.</li>
           <li>Type a street address in search to jump to its suburb.</li>
           <li>Colour the map by <strong>Greenfield</strong> or <strong>Infill</strong> to separate the two development stories.</li>
-          <li><strong>⚖ Customise weights</strong> rebuilds every score with your own priorities.</li>
+          <li><strong>Customise weights</strong> rebuilds every score with your own priorities.</li>
           <li>Toggle the electricity network or train stations on the map.</li>
           <li>Copy the URL any time — it restores your exact view, suburb, comparison and custom weights.</li>
         </ul>
@@ -282,6 +279,6 @@
 <script>if (window.innerWidth < 900) document.getElementById('dock').classList.add('collapsed');</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>

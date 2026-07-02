@@ -191,7 +191,7 @@
       <div class="market-row">
         <div class="price"><span class="ml">Median house</span><span class="pv-big">${money(m.median_house)}</span></div>
         ${spark(m.house_series)}
-        <div class="growth" style="color:${up ? "var(--good)" : "#ff3b30"}">${up ? "▲" : "▼"} ${m.house_12m ?? "–"}% <small>12m</small></div>
+        <div class="growth" style="color:${up ? "var(--good)" : "var(--bad)"}">${up ? IC.up : IC.down} ${m.house_12m ?? "–"}% <small>12m</small></div>
       </div>
       <div class="market-sub">
         ${m.median_unit ? `Unit ${money(m.median_unit)} · ` : ""}3-yr ${m.house_3yr_cagr ?? "–"}%/yr
@@ -206,6 +206,11 @@
     bolt: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg>',
     train: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="13" rx="2.5"/><path d="M6 10h12M9.5 16 7 20M14.5 16 17 20"/><circle cx="9.5" cy="13" r=".6" fill="currentColor"/><circle cx="14.5" cy="13" r=".6" fill="currentColor"/></svg>',
     school: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4 9 4.5-9 4.5-9-4.5z"/><path d="M6.5 10.8V16c0 1.2 2.5 2.5 5.5 2.5s5.5-1.3 5.5-2.5v-5.2"/></svg>',
+    drop: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c3.1 4.1 6 7.4 6 10.5a6 6 0 1 1-12 0c0-3.1 2.9-6.4 6-10.5Z"/></svg>',
+    flame: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c.5 3-1.4 4.7-2.9 6.3C7.7 10.8 7 12.3 7 14a5 5 0 0 0 10 0c0-1.5-.5-2.9-1.4-4.1-.5 1-1.2 1.7-2.1 2.1.5-2.8-.2-6.2-1.5-9Z"/></svg>',
+    cmp: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7H7M10 4 7 7l3 3M4 17h13M14 14l3 3-3 3"/></svg>',
+    up: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    down: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
   };
 
   function transitBlock(a, prominent) {
@@ -232,9 +237,9 @@
     const her = z.heritage_share >= 0.03
       ? `<span class="sig ${z.heritage_share >= 0.25 ? "sig-soft" : "sig-moderate"}">Heritage ${Math.round(z.heritage_share * 100)}%</span>` : "";
     const flood = (z.flood_share || 0) >= 0.03
-      ? `<span class="sig sig-risk" title="Share of sampled land under a flood overlay (LSIO / SBO / FO) — check before buying or building">💧 Flood ${Math.round(z.flood_share * 100)}%</span>` : "";
+      ? `<span class="sig sig-risk" title="Share of sampled land under a flood overlay (LSIO / SBO / FO) — check before buying or building">${IC.drop} Flood ${Math.round(z.flood_share * 100)}%</span>` : "";
     const fire = (z.bushfire_share || 0) >= 0.03
-      ? `<span class="sig sig-risk" title="Share of sampled land under the Bushfire Management Overlay">🔥 Bushfire ${Math.round(z.bushfire_share * 100)}%</span>` : "";
+      ? `<span class="sig sig-risk" title="Share of sampled land under the Bushfire Management Overlay">${IC.flame} Bushfire ${Math.round(z.bushfire_share * 100)}%</span>` : "";
     return `<div class="market${prominent ? "" : " mini"}">
       <div class="market-h">Planning, Zoning &amp; Hazards <span class="src">VicPlan</span></div>
       <div class="market-sub"><span class="sig sig-${z.growth_share >= 0.2 ? "strong" : z.restrict_share >= 0.5 ? "soft" : "moderate"}">${z.label}</span>${mix}${her}</div>
@@ -279,7 +284,7 @@
       </div>
       <div class="chips">${chips}</div>
       <p class="bestfor"><b>Best for:</b> ${bestFor(a)}.
-        <button class="cmp-btn" id="cmpBtn" title="Compare this suburb side-by-side with another">⇆ Compare</button></p>
+        <button class="cmp-btn" id="cmpBtn" title="Compare this suburb side-by-side with another">${IC.cmp} Compare</button></p>
       ${comparePicking ? `<p class="cmp-hint">Now tap a second suburb on the map, list or search…
         <button class="cmp-x" id="cmpCancel">cancel</button></p>` : ""}
       <div class="bigrow">
