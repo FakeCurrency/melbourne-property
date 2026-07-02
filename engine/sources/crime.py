@@ -271,6 +271,49 @@ def get_crime_suburb(name_by_code: dict[str, str],
     return out
 
 
+def get_postcode_map(name_by_code: dict[str, str],
+                     lga_by_code: dict[str, str]) -> dict[str, list[str]]:
+    """{postcode: [sa2_codes]} for search — from CSA Table 03's postcode column."""
+    cache = config.DATA_RAW / "crime_postcodes.json"
+    if cache.exists() and cache.stat().st_size > 0:
+        print("  cached  crime_postcodes.json")
+        pc2loc = json.loads(cache.read_text(encoding="utf-8"))
+    else:
+        metro_lgas = {_norm_lga(v) for v in lga_by_code.values() if v}
+        path = fetch(INCIDENTS_XLSX_URL, "csa_lga_criminal_incidents.xlsx")
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        pairs = set()
+        for _y, _end, lga, pc, suburb, *_rest in wb["Table 03"].iter_rows(min_row=2, values_only=True):
+            if pc is None or suburb is None or _norm_lga(lga) not in metro_lgas:
+                continue
+            pc = str(pc).strip().split(".")[0]
+            if len(pc) == 4 and pc.isdigit():
+                pairs.add((pc, str(suburb).strip().upper()))
+        wb.close()
+        pc2loc = defaultdict(list)
+        for pc, loc in sorted(pairs):
+            pc2loc[pc].append(loc)
+        pc2loc = dict(pc2loc)
+        cache.write_text(json.dumps(pc2loc), encoding="utf-8")
+        print(f"  postcodes: {len(pc2loc)} metro postcodes mapped to localities")
+
+    loc2sa2: dict[str, list[str]] = defaultdict(list)
+    for code, name in name_by_code.items():
+        for loc in _sa2_localities(name):
+            loc2sa2[loc].append(code)
+    out: dict[str, list[str]] = {}
+    for pc, locs in pc2loc.items():
+        codes: list[str] = []
+        for loc in locs:
+            for c in loc2sa2.get(loc, []):
+                if c not in codes:
+                    codes.append(c)
+        if codes:
+            out[pc] = codes
+    print(f"  postcodes: {len(out)} postcodes resolve to SA2s")
+    return out
+
+
 if __name__ == "__main__":  # pragma: no cover
     c = get_crime()
     for code in list(c)[:3]:

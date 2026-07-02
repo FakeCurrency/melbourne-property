@@ -80,7 +80,9 @@
   }
 
   // ---- map --------------------------------------------------------------
-  const map = L.map("map", { zoomControl: true }).setView([-37.84, 145.05], 10);
+  // Canvas renderer: one bitmap instead of 361+ SVG nodes — much smoother pan/zoom
+  const map = L.map("map", { zoomControl: true, preferCanvas: true,
+    renderer: L.canvas({ padding: 0.4 }) }).setView([-37.84, 145.05], 10);
   const tilesFor = dark => L.tileLayer(
     `https://{s}.basemaps.cartocdn.com/${dark ? "dark_nolabels" : "light_nolabels"}/{z}/{x}/{y}{r}.png`,
     { subdomains: "abcd", maxZoom: 19, attribution: '&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Data: ABS, CSA Vic' });
@@ -213,19 +215,24 @@
     down: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
   };
 
+  const paxFmt = p => p == null ? "" : p >= 1e6 ? `${(p / 1e6).toFixed(1)}M trips/yr` : `${Math.round(p / 1e3)}k trips/yr`;
   function transitBlock(a, prominent) {
     const t = a.transit, s = a.schools;
     if (t.nearest_station_km == null && s.nearest_primary_km == null) return "";
-    const st = t.nearest_station_km != null
-      ? `${IC.train} <b>${t.nearest_station}</b> ~${t.nearest_station_km} km${t.stations_3km > 1 ? ` · ${t.stations_3km} stations &lt;3 km` : ""}`
-      : "";
+    const line = (badge, cls, nm, km, pax, cap) => (nm && km != null && km <= cap)
+      ? `<div class="trow"><span class="tbadge ${cls}">${badge}</span>
+          <span class="tnm">${nm}</span>
+          <span class="tkm">${km} km</span>
+          <span class="tpax">${paxFmt(pax)}</span></div>` : "";
+    const metro = line("M", "tb-m", t.metro && t.metro.station, t.metro && t.metro.km, t.metro && t.metro.pax, 30);
+    const vline = line("V", "tb-v", t.vline && t.vline.station, t.vline && t.vline.km, t.vline && t.vline.pax, 45);
+    const near = t.stations_3km > 1 ? `<div class="market-sub">${t.stations_3km} stations within 3 km</div>` : "";
     const sch = s.nearest_primary_km != null
-      ? `${IC.school} primary ~${s.nearest_primary_km} km · secondary ~${s.nearest_secondary_km ?? "—"} km · ${s.schools_3km} schools &lt;3 km`
+      ? `<div class="market-sub icrow">${IC.school} primary ~${s.nearest_primary_km} km · secondary ~${s.nearest_secondary_km ?? "—"} km · ${s.schools_3km} schools &lt;3 km</div>`
       : "";
     return `<div class="market${prominent ? "" : " mini"}">
       <div class="market-h">Trains &amp; Schools <span class="src">DTP FY24-25 · DE 2025</span></div>
-      ${st ? `<div class="market-sub icrow">${st}</div>` : ""}
-      ${sch ? `<div class="market-sub icrow">${sch}</div>` : ""}</div>`;
+      ${metro}${vline}${near}${sch}</div>`;
   }
 
   function zoningBlock(a, prominent) {
@@ -466,8 +473,13 @@
     minScore$.value = Math.max(0, Math.min(90, Math.round(minScore)));
     document.getElementById("minVal").textContent = Math.round(minScore);
   }
-  blend.oninput = () => { wLive = blend.value / 100; activePreset = null; activeBest = null; setSlider(); refresh(); };
-  minScore$.oninput = () => { minScore = +minScore$.value; activeBest = null; document.getElementById("minVal").textContent = minScore; repaint(); highlightBest(); };
+  // rAF throttle: sliders fire dozens of events per second — repaint at most once a frame
+  let rafId = 0;
+  const scheduleRefresh = () => { if (!rafId) rafId = requestAnimationFrame(() => { rafId = 0; refresh(); }); };
+  let rafPaint = 0;
+  const schedulePaint = () => { if (!rafPaint) rafPaint = requestAnimationFrame(() => { rafPaint = 0; repaint(); highlightBest(); writeHash(); }); };
+  blend.oninput = () => { wLive = blend.value / 100; activePreset = null; activeBest = null; setSlider(); scheduleRefresh(); };
+  minScore$.oninput = () => { minScore = +minScore$.value; activeBest = null; document.getElementById("minVal").textContent = minScore; schedulePaint(); };
 
   // colour-by toggle chips (one tap to colour the map by a single layer)
   const CBY_TIPS = {
@@ -569,7 +581,7 @@
   document.getElementById("genline").textContent = `${data.count} suburbs · built ${data.generated}`;
 
   // ---- shareable URL state ------------------------------------------------
-  let hashReady = false;
+  let hashReady = false, lastHash = "";
   function writeHash() {
     if (!hashReady) return;
     const p = new URLSearchParams();
@@ -582,7 +594,10 @@
       p.set("lw", Object.keys(W_INPUTS.live).map(k => customW.live[k] || 0).join("."));
       p.set("dw", Object.keys(W_INPUTS.dev).map(k => customW.dev[k] || 0).join("."));
     }
-    history.replaceState(null, "", "#" + p.toString());
+    const h = "#" + p.toString();
+    if (h === lastHash) return;              // replaceState is rate-limited in some browsers
+    lastHash = h;
+    history.replaceState(null, "", h);
   }
   function readHash() {
     const h = location.hash.replace(/^#/, "");
@@ -686,7 +701,7 @@
       sl.nextElementSibling.textContent = sl.value;
       if (!customW) customW = { live: defaultW("live"), dev: defaultW("dev") };
       customW[sl.dataset.kind][sl.dataset.k] = +sl.value;
-      recomputeCustom(); refresh();
+      recomputeCustom(); scheduleRefresh();
     });
   }
   function openWeights() {
@@ -740,9 +755,28 @@
   const search = document.getElementById("search"), results = document.getElementById("results");
   const topbar = document.getElementById("topbar");
   const closeSearch = () => { topbar.classList.remove("search-open"); results.innerHTML = ""; search.blur(); };
+  const POSTCODES = data.postcodes || {};
   function runSearch() {
     const q = search.value.trim().toLowerCase(); results.innerHTML = "";
     if (!q) return;
+    // postcode search: 3-4 digits matches postcode prefixes from the CSA table
+    if (/^\d{3,4}$/.test(q)) {
+      const rows = [];
+      for (const pc of Object.keys(POSTCODES).filter(p => p.startsWith(q)).sort().slice(0, 6)) {
+        for (const code of POSTCODES[pc]) {
+          if (A[code]) rows.push([pc, code]);
+          if (rows.length >= 9) break;
+        }
+        if (rows.length >= 9) break;
+      }
+      rows.forEach(([pc, code]) => {
+        const d = document.createElement("div"); d.className = "res";
+        d.innerHTML = `<span>${A[code].name}</span><small>${pc}</small>`;
+        d.onclick = () => { select(code, true); search.value = A[code].name; closeSearch(); };
+        results.appendChild(d);
+      });
+      return;
+    }
     entries.filter(([, a]) => a.name.toLowerCase().includes(q)).slice(0, 8).forEach(([code, a]) => {
       const d = document.createElement("div"); d.className = "res";
       d.innerHTML = `<span>${a.name}</span><small>${a.lga || ""}</small>`;

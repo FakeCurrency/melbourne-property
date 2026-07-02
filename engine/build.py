@@ -64,6 +64,7 @@ def build() -> None:
     crime_lga = crime.get_crime()
     lgas = {c: crime_lga[c].get("lga") for c in index}
     crime_sub = crime.get_crime_suburb(names, pops, lgas)
+    postcodes = crime.get_postcode_map(names, lgas)
 
     print("4/9 prices (Valuer-General)")
     price_data = prices.get_prices(names)
@@ -134,6 +135,10 @@ def build() -> None:
             "nearest_station_km": st.get("nearest_station_km"),
             "nearest_station": st.get("nearest_station"),
             "stations_3km": st.get("stations_3km"), "station_pax": st.get("station_pax"),
+            "metro_km": st.get("metro_km"), "metro_station": st.get("metro_station"),
+            "metro_pax": st.get("metro_pax"),
+            "vline_km": st.get("vline_km"), "vline_station": st.get("vline_station"),
+            "vline_pax": st.get("vline_pax"),
             "nearest_primary_km": sc.get("nearest_primary_km"),
             "nearest_secondary_km": sc.get("nearest_secondary_km"),
             "schools_3km": sc.get("schools_3km"),
@@ -163,6 +168,7 @@ def build() -> None:
                     "dev_greenfield": config.DEV_GREENFIELD_WEIGHTS,
                     "dev_infill": config.DEV_INFILL_WEIGHTS},
         "sources": SOURCES_NOTE,
+        "postcodes": postcodes,
         "areas": scored,
     }
     config.PUBLIC_DATA.mkdir(parents=True, exist_ok=True)

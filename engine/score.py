@@ -416,6 +416,10 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "nearest_station": r.get("nearest_station"),
             "stations_3km": r.get("stations_3km"),
             "station_pax": r.get("station_pax"),
+            "metro": {"km": r.get("metro_km"), "station": r.get("metro_station"),
+                      "pax": r.get("metro_pax")},
+            "vline": {"km": r.get("vline_km"), "station": r.get("vline_station"),
+                      "pax": r.get("vline_pax")},
         }
         school = {
             "score": schools_score,

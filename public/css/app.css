@@ -405,3 +405,15 @@ button,.preset,.cby button,.best-btn,.about-tab{transition:transform .12s ease,b
 .wrow input[type=range]::-moz-range-thumb{width:18px;height:18px}
 .wrow b{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
 @media (max-width:640px){.w-cols{grid-template-columns:1fr}}
+
+/* --- transit widget rows (Metro / V/Line) ---------------------------------- */
+.trow{display:grid;grid-template-columns:22px 1fr auto auto;align-items:center;gap:8px;
+  padding:6px 0;border-bottom:.5px solid var(--line);font-size:13px;letter-spacing:-.1px}
+.trow:last-of-type{border-bottom:none}
+.tbadge{width:20px;height:20px;border-radius:6px;color:#fff;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.tbadge.tb-m{background:var(--accent)}
+.tbadge.tb-v{background:var(--purple)}
+.tnm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tkm{color:var(--ink);font-variant-numeric:tabular-nums}
+.tpax{color:var(--ink3);font-size:11px;font-variant-numeric:tabular-nums}

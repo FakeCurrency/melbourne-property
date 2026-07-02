@@ -89,6 +89,22 @@ def get_stations(points: dict[str, tuple[float, float]],
         encoding="utf-8")
 
     near2 = NEAR_KM ** 2
+
+    def _nearest(sample, cx, cy, subset):
+        """(median km over sample, centroid-nearest station) for a station subset."""
+        if not subset:
+            return None, None
+        best2, best = float("inf"), None
+        for sx, sy, s in subset:
+            d2 = (cx - sx) ** 2 + (cy - sy) ** 2
+            if d2 < best2:
+                best2, best = d2, s
+        dists = sorted(min((px - sx) ** 2 + (py - sy) ** 2 for sx, sy, _ in subset)
+                       for px, py in sample)
+        return round(dists[len(dists) // 2] ** 0.5, 2), best
+
+    metro = [s for s in stations if s[2]["kind"] == "metro"]
+    vline = [s for s in stations if s[2]["kind"] == "vline"]
     out = {}
     res_used = 0
     for code, (lon, lat) in points.items():
@@ -96,27 +112,25 @@ def get_stations(points: dict[str, tuple[float, float]],
         if rp:
             res_used += 1
         sample = [_to_km(px, py) for px, py in rp] or [_to_km(lon, lat)]
-        # residential centroid anchors "nearest station" name + the 3 km count
+        # residential centroid anchors "nearest station" names + the 3 km count
         cx = sum(x for x, _ in sample) / len(sample)
         cy = sum(y for _, y in sample) / len(sample)
-        best2, best, count = float("inf"), None, 0
-        for sx, sy, s in stations:
-            d2 = (cx - sx) ** 2 + (cy - sy) ** 2
-            if d2 < best2:
-                best2, best = d2, s
-            if d2 <= near2:
-                count += 1
-        dists = sorted(min((px - sx) ** 2 + (py - sy) ** 2 for sx, sy, _ in stations)
-                       for px, py in sample)
-        median2 = dists[len(dists) // 2]
+        count = sum(1 for sx, sy, _ in stations if (cx - sx) ** 2 + (cy - sy) ** 2 <= near2)
+        any_km, any_st = _nearest(sample, cx, cy, stations)
+        m_km, m_st = _nearest(sample, cx, cy, metro)
+        v_km, v_st = _nearest(sample, cx, cy, vline)
         out[code] = {
-            "nearest_station_km": round(median2 ** 0.5, 2) if best else None,
-            "nearest_station": best["name"] if best else None,
+            "nearest_station_km": any_km,
+            "nearest_station": any_st["name"] if any_st else None,
             "stations_3km": count,
-            "station_pax": best["pax"] if best else None,
+            "station_pax": any_st["pax"] if any_st else None,
+            "metro_km": m_km, "metro_station": m_st["name"] if m_st else None,
+            "metro_pax": m_st["pax"] if m_st else None,
+            "vline_km": v_km, "vline_station": v_st["name"] if v_st else None,
+            "vline_pax": v_st["pax"] if v_st else None,
         }
-    print(f"  transport: {len(stations)} stations -> access for {len(out)} SA2s "
-          f"({res_used} measured from residential land)")
+    print(f"  transport: {len(metro)} metro + {len(vline)} V/Line stations -> access for "
+          f"{len(out)} SA2s ({res_used} measured from residential land)")
     return out
 
 
