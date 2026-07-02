@@ -42,8 +42,13 @@ OVERLAY_WHERE = ("ZONE_CODE LIKE 'HO%' OR ZONE_CODE LIKE 'FO%' OR ZONE_CODE LIKE
 FLOOD_CODES = {"FO", "LSIO", "SBO", "RFO"}
 FIRE_CODES = {"BMO"}
 # Zones where people live — these sample points drive the distance metrics.
-RESIDENTIAL_CODES = {"GRZ", "NRZ", "RGZ", "MUZ", "LDRZ", "TZ", "UGZ", "HCTZ",
+# Tiered: established urban residential first; UGZ (future estates) and LDRZ
+# (sparse hobby-farm lots, which area-weighting exaggerates) only as fallbacks —
+# otherwise a township SA2 gets measured from its empty growth-front paddocks.
+RESIDENTIAL_URBAN = {"GRZ", "NRZ", "RGZ", "MUZ", "TZ", "HCTZ",
                      "ACZ", "CCZ", "C1Z", "R1Z", "R2Z", "R3Z"}
+RESIDENTIAL_UGZ = {"UGZ"}
+RESIDENTIAL_LDRZ = {"LDRZ"}
 _HEADERS = {"User-Agent": "Mozilla/5.0 (melb-scorer data build)"}
 TARGET_POINTS = 280
 WORKERS = 6
@@ -153,6 +158,8 @@ def _shares_for(sa2_geom: dict) -> dict | None:
     mix: dict[str, int] = {}
     classified = heritage = flood = fire = 0
     res_points: list[list[float]] = []
+    ugz_points: list[list[float]] = []
+    ldrz_points: list[list[float]] = []
     for x, y in pts:
         code = None
         for zp, zb, zc in zones:
@@ -162,8 +169,12 @@ def _shares_for(sa2_geom: dict) -> dict | None:
         if code:
             classified += 1
             mix[code] = mix.get(code, 0) + 1
-            if code in RESIDENTIAL_CODES:
+            if code in RESIDENTIAL_URBAN:
                 res_points.append([round(x, 4), round(y, 4)])
+            elif code in RESIDENTIAL_UGZ:
+                ugz_points.append([round(x, 4), round(y, 4)])
+            elif code in RESIDENTIAL_LDRZ:
+                ldrz_points.append([round(x, 4), round(y, 4)])
         hit_h = hit_f = hit_b = False
         for op, ob, oc in overlays:
             if hit_h and hit_f and hit_b:
@@ -193,7 +204,7 @@ def _shares_for(sa2_geom: dict) -> dict | None:
         "bushfire_share": round(fire / len(pts), 4),
         "zoning_raw": round(growth + 0.45 * standard - 0.35 * restrict, 4),
         "zone_mix": [[c, round(n / classified, 3)] for c, n in top],
-        "res_points": res_points,
+        "res_points": res_points, "ugz_points": ugz_points, "ldrz_points": ldrz_points,
         "n_points": len(pts),
     }
 
@@ -201,7 +212,7 @@ def _shares_for(sa2_geom: dict) -> dict | None:
 def get_zoning(features_by_code: dict[str, dict]) -> dict[str, dict]:
     """{sa2_code: {growth_share, standard_share, restrict_share, heritage_share,
                    zoning_raw, zone_mix}} — cached, resumable."""
-    cache_path = config.DATA_RAW / "vicplan_shares_v2.json"
+    cache_path = config.DATA_RAW / "vicplan_shares_v3.json"
     cache: dict[str, dict] = {}
     if cache_path.exists() and cache_path.stat().st_size > 0:
         cache = json.loads(cache_path.read_text(encoding="utf-8"))

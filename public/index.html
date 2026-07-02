@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/app.css?v=13" />
+<link rel="stylesheet" href="css/app.css?v=14" />
 </head>
 <body>
 
@@ -178,8 +178,9 @@
         <ul>
           <li>Lower rates of crimes against the person (now <strong>suburb-level</strong>)</li>
           <li>Higher socio-economic advantage (SEIFA)</li>
-          <li>Closer train stations and schools</li>
+          <li>Closer train stations and schools (measured from residential land)</li>
           <li>More stable, owner-occupied housing</li>
+          <li>Less flood / bushfire overlay coverage</li>
           <li>Higher share of families with children (in Family mode)</li>
         </ul>
       </div>
@@ -192,7 +193,11 @@
           <li>Recent price growth momentum and gross rental yield</li>
           <li>Train-station proximity (activity-centre uplift) and electricity-grid support</li>
           <li>Less Heritage Overlay coverage (heritage controls constrain rebuilds)</li>
+          <li>Less flood (LSIO/SBO/FO) and bushfire (BMO) overlay coverage</li>
         </ul>
+        <p class="note">Two sub-lenses split the story: <strong>Greenfield</strong> (UGZ corridors —
+        estate-scale land supply) and <strong>Infill</strong> (upzoned, station-centred established
+        suburbs). Colour the map by either from the chips.</p>
       </div>
       <div class="criteria-block">
         <h5>Overall Score &amp; grades</h5>
@@ -215,6 +220,10 @@
         <div><strong>Premium market</strong> — High prices, typically established or blue-chip areas</div>
         <div><strong>Tightly held</strong> — High owner-occupier rates, lower rental turnover</div>
         <div><strong>Family-friendly</strong> — Higher share of families with children + strong safety signals</div>
+        <div><strong>Zoned for growth</strong> — 20%+ of land already upzoned (RGZ/MUZ/ACZ/HCTZ)</div>
+        <div><strong>Flood / Bushfire overlay</strong> — 25%+ of land under LSIO/SBO/FO or BMO controls</div>
+        <div><strong>Heritage constrained</strong> — 25%+ of land under a Heritage Overlay</div>
+        <div><strong>Employment precinct</strong> — Almost no residents (airport/industrial); liveability signals not meaningful</div>
       </div>
     </div>
 
@@ -273,6 +282,6 @@
 <script>if (window.innerWidth < 900) document.getElementById('dock').classList.add('collapsed');</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/app.js?v=13"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>

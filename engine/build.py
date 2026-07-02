@@ -71,7 +71,12 @@ def build() -> None:
     rent_data = rents.get_rents(names, lgas)
     print("6/9 zoning + overlays (VicPlan)")
     zone_data = zoning.get_zoning(geoms)
-    res_pts = {c: z.get("res_points") for c, z in zone_data.items()}
+
+    def _lived_in_points(z):
+        """Established urban residential first; UGZ then LDRZ ONLY when a tier is
+        empty — two real township points beat eleven empty growth-front paddocks."""
+        return (z.get("res_points") or z.get("ugz_points") or z.get("ldrz_points") or [])
+    res_pts = {c: _lived_in_points(z) for c, z in zone_data.items()}
     print("7/9 transport (train stations, residential-weighted)")
     station_data = transport.get_stations(points, res_pts)
     print("8/9 schools (residential-weighted) + electricity (Geoscience Australia)")

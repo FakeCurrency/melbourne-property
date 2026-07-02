@@ -232,15 +232,24 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
     g = lambda key: {c: records[c].get(key) for c in codes}  # noqa: E731
 
     # combined hazard coverage (flood + bushfire overlays) and headline yield
-    # (unit yield where units dominate the stock, else 3BR-house yield)
+    # (unit yield where units dominate the stock, else 3BR-house yield). The
+    # basis label always reflects the figure actually used, including fallbacks.
     hazard = {}
     yield_head = {}
+    yield_basis = {}
     for c in codes:
         r = records[c]
         fl, bf = r.get("flood_share"), r.get("bushfire_share")
         hazard[c] = (fl or 0) + (bf or 0) if (fl is not None or bf is not None) else None
-        yield_head[c] = (r.get("yield_unit") if r.get("yield_basis") == "unit"
-                         else r.get("yield_house")) or r.get("yield_house") or r.get("yield_unit")
+        yh, yu = r.get("yield_house"), r.get("yield_unit")
+        if r.get("yield_basis") == "unit" and yu is not None:
+            yield_head[c], yield_basis[c] = yu, "unit"
+        elif yh is not None:
+            yield_head[c], yield_basis[c] = yh, "house"
+        elif yu is not None:
+            yield_head[c], yield_basis[c] = yu, "unit"
+        else:
+            yield_head[c], yield_basis[c] = None, None
 
     n = {
         "person_safety": _percentiles(g("person_crime"), invert=True),
@@ -390,7 +399,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "rent_weekly": r.get("rent_weekly"), "rent_12m": r.get("rent_12m"),
             "rent_quarter": r.get("rent_quarter"),
             "yield_house": r.get("yield_house"), "yield_unit": r.get("yield_unit"),
-            "yield_headline": yield_head[c], "yield_basis": r.get("yield_basis"),
+            "yield_headline": yield_head[c], "yield_basis": yield_basis[c],
             "yield_signal": _yield_signal(yield_head[c]),
         }
         infra = {

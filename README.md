@@ -88,20 +88,27 @@ data-coverage line so you can see exactly what a suburb's scores are based on.
 Each input is converted to a **percentile (0–100) within Greater Melbourne** (higher = better; crime,
 social housing and density are inverted), then blended with the weights in `engine/config.py`:
 
-- **Liveability (base — Balanced/Invest)** = 34% personal safety + 27% SEIFA IRSAD +
-  10% train access + 10% owner-occupier + 7% school access + 6% property safety + 6% child share.
-- **Liveability (Family-First — Live mode)** = 34% personal safety + 19% SEIFA + **16% child share**
-  + **12% school access** + 9% owner-occupier + 7% train access + **3% property safety**. The engine
-  ships both as `live` and `live_family`.
+- **Liveability (base — Balanced/Invest)** = 33% personal safety + 25% SEIFA IRSAD +
+  10% train access + 9% owner-occupier + 7% school access + 6% property safety + 5% child share +
+  **5% hazard-free** (less flood/bushfire overlay coverage).
+- **Liveability (Family-First — Live mode)** = 33% personal safety + 18% SEIFA + **15% child share**
+  + **12% school access** + 8% owner-occupier + 7% train access + 4% hazard-free +
+  **3% property safety**. The engine ships both as `live` and `live_family`.
 - **Family Suitability** (badge) = 32% child share + 28% SEIFA IEO + 22% personal safety +
   18% school access.
-- **Development potential** = **20% detached headroom + 18% zoning upside** (growth-zone share,
-  with restrictive zones penalised) + 13% recent capital growth (VG 3-year CAGR) + 13%
-  electricity-network support + 10% station access + **8% gross rental yield** + 7% renter turnover +
-  6% low density + **5% heritage-free** (share of land NOT under a Heritage Overlay). The scorecard's
-  **Market & Price**, **Planning & Zoning**, **Trains & Schools** and **Infrastructure & Electricity**
-  blocks lead in Invest/Develop modes; toggles overlay stations and transmission lines on the map.
-- **Overall** = `slider × Liveability + (1 − slider) × Development`.
+- **Development potential** = **19% detached headroom + 17% zoning upside** (growth-zone share,
+  with restrictive zones penalised) + 12% recent capital growth (VG 3-year CAGR) + 12%
+  electricity-network support + 10% station access + **8% gross rental yield** (unit basis where
+  units dominate) + 7% renter turnover + 5% low density + **5% heritage-free** + **5% hazard-free**.
+  Two percentile-stretched **sub-lenses** ship alongside: `dev_green` (Greenfield: UGZ corridors)
+  and `dev_infill` (Infill: upzoned + station-centred established suburbs). The scorecard's
+  **Market & Price**, **Planning, Zoning & Hazards**, **Trains & Schools** and **Infrastructure &
+  Electricity** blocks lead in Invest/Develop modes; toggles overlay stations and transmission lines.
+- **Overall** = `slider × Liveability + (1 − slider) × Development`. Liveability and Development are
+  re-ranked 0–100 across all SA2s; letter grades are tiers of the default-blend Overall (A+ = top
+  ~10%). Station/school distances are measured from **residentially-zoned sample points**, missing
+  inputs are excluded with weights renormalised, and a **⚖ Customise weights** panel rebuilds every
+  score client-side (shareable via the URL).
 
 **One-click presets** (set the slider + colour-by + palette; slider still overrides):
 Family First (85/15), Pure Safety (95/5), Balanced Investor (45/55), Value-Add/Developer (20/80).
@@ -117,8 +124,9 @@ move the slider — no rebuild needed.
 - **P3** Electricity network (Geoscience Australia) — map overlay — ✅ **done**
 - **P4** Suburb-level crime, rents/yields, stations, schools, **VicPlan zoning + Heritage Overlay**,
   compare mode, address search, shareable URLs — ✅ **done**
-- **P5** Remaining planning overlays (flooding, vegetation, height controls), land values,
-  address-level lookup
+- **P5** Flood (LSIO/SBO/FO) + bushfire (BMO) overlays, ERP 2025 populations, Greenfield/Infill
+  sub-lenses, residential-weighted distances, custom weights — ✅ **done**
+- **P6** Height/design overlays (DDO), vegetation controls, land values, address-level lookup
 
 ## Deploy
 

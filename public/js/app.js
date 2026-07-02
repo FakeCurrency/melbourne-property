@@ -305,10 +305,11 @@
       ${bar("Zoning upside", p.zoning.score, a.zoning ? a.zoning.label : "n/a")}
       ${bar("Recent growth", m.growth_score, m.house_3yr_cagr == null ? "n/a" : m.house_3yr_cagr + "%/yr")}
       ${bar("Grid support", a.infra.score, a.infra.advantage)}
-      ${bar("Rental yield", p.yield.score, p.yield.raw == null ? "n/a" : p.yield.raw + "%")}
+      ${bar("Rental yield", p.yield.score, p.yield.raw == null ? "n/a" : p.yield.raw + "%" + (m.yield_basis === "unit" ? " unit" : ""))}
       ${bar("Rental turnover", p.rental.score, pct(p.rental.raw), true)}
       ${bar("Low density", p.low_density.score, p.low_density.raw == null ? "—" : Math.round(p.low_density.raw).toLocaleString() + "/km²", true)}
       ${bar("Heritage freedom", p.heritage_free.score, p.heritage_free.raw == null ? "n/a" : Math.round(p.heritage_free.raw * 100) + "% HO", true)}
+      ${bar("Hazard-free", p.hazard_free.score, p.hazard_free.raw == null ? "n/a" : Math.round(p.hazard_free.raw * 100) + "% overlay", true)}
       <p class="summary">${a.explanation_live}</p>
       <p class="summary dev">${a.explanation_dev}</p>
       ${prominent ? "" : marketBlock(a, false) + zoningBlock(a, false) + transitBlock(a, false) + infraBlock(a, false)}
@@ -826,7 +827,7 @@
   document.getElementById("howtoBtn").onclick = () => openGuide("start");
   modal.querySelectorAll("#closeAbout, #closeAbout2").forEach(b => b.onclick = closeGuide);
   modal.onclick = e => { if (e.target === modal) closeGuide(); };
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeGuide(); closeSearch(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeGuide(); closeSearch(); closeWeights(); } });
 
   // ---- init -------------------------------------------------------------
   setTheme(localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
