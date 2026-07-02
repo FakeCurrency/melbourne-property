@@ -6,6 +6,7 @@ data_raw/ and only re-fetch when missing (or force=True).
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -42,24 +43,46 @@ def fetch_wayback(url: str, filename: str, force: bool = False) -> Path:
     Some official hosts (e.g. land.vic.gov.au) sit behind a bot-protection WAF
     that 403s automated requests. The Internet Archive keeps clean copies, so we
     resolve the closest snapshot and pull the raw bytes (``id_`` form).
+
+    The availability API is flaky from datacenter IPs (e.g. GitHub Actions), so
+    on failure we fall back to Wayback's wildcard-timestamp redirect and finally
+    the direct source URL, rejecting HTML error/challenge pages.
     """
     config.DATA_RAW.mkdir(parents=True, exist_ok=True)
     dest = config.DATA_RAW / filename
     if dest.exists() and dest.stat().st_size > 0 and not force:
         print(f"  cached  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
         return dest
-    avail = requests.get("http://archive.org/wayback/available",
-                         params={"url": url}, headers=_HEADERS, timeout=60).json()
-    snap = avail.get("archived_snapshots", {}).get("closest", {})
-    if not snap.get("available"):
-        raise RuntimeError(f"No Wayback snapshot for {url}")
-    raw = f"https://web.archive.org/web/{snap['timestamp']}id_/{url}"
-    print(f"  downloading {filename} via Wayback ({snap['timestamp']}) ...")
-    r = requests.get(raw, headers=_HEADERS, timeout=120)
-    r.raise_for_status()
-    dest.write_bytes(r.content)
-    print(f"  downloaded  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
-    return dest
+
+    snap_url = None
+    for attempt in range(3):
+        try:
+            avail = requests.get("http://archive.org/wayback/available",
+                                 params={"url": url}, headers=_HEADERS, timeout=60).json()
+            snap = avail.get("archived_snapshots", {}).get("closest", {})
+            if snap.get("available"):
+                snap_url = f"https://web.archive.org/web/{snap['timestamp']}id_/{url}"
+                break
+        except Exception:
+            pass
+        time.sleep(3 * (attempt + 1))
+
+    # "2id_" = wildcard timestamp: web.archive.org redirects to the nearest snapshot.
+    candidates = [u for u in (snap_url, f"https://web.archive.org/web/2id_/{url}", url) if u]
+    last_err: Exception | None = None
+    for cand in candidates:
+        try:
+            print(f"  downloading {filename} via {cand.split('/')[2]} ...")
+            r = requests.get(cand, headers=_HEADERS, timeout=120, allow_redirects=True)
+            r.raise_for_status()
+            if r.content[:200].lstrip().lower().startswith((b"<!doctype", b"<html")):
+                raise RuntimeError("got an HTML page instead of the file (WAF/error page)")
+            dest.write_bytes(r.content)
+            print(f"  downloaded  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
+            return dest
+        except Exception as e:  # noqa: BLE001 - try the next fallback
+            last_err = e
+    raise RuntimeError(f"Could not fetch {url} via Wayback or directly: {last_err}")
 
 
 def arcgis_query_all(layer_url: str, out_fields: str, where: str = "1=1") -> list[dict]:
