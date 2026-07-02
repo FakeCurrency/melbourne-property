@@ -342,3 +342,7 @@ button,.preset,.cby button,.best-btn,.about-tab{transition:transform .1s ease,ba
 .cmp-titles b{display:block}
 .grade.gmini{font-size:10px;padding:1px 7px;margin-left:4px}
 #results .res.addr span{color:var(--accent)}
+
+/* --- no-data pillar bars (input excluded, weights renormalised) ----------- */
+.pill.nodata .pv{color:var(--ink3);font-style:italic}
+.pill.nodata .bar{opacity:.35}

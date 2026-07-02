@@ -5,7 +5,7 @@ import datetime as dt
 import json
 
 from . import config, geo, score
-from .sources import census, crime, electricity, prices, rents, schools, transport, zoning
+from .sources import census, crime, electricity, erp, prices, rents, schools, transport, zoning
 
 SOURCES_NOTE = {
     "boundaries": "ABS ASGS Edition 3 SA2 (2021)",
@@ -13,6 +13,7 @@ SOURCES_NOTE = {
     "seifa": "ABS SEIFA 2021 (IRSAD + IEO) by SA2",
     "housing": "ABS Census 2021 G37 (tenure x dwelling structure) by SA2",
     "demographics": "ABS Census 2021 G01 (age 0-14 child share) by SA2",
+    "population": "ABS Regional Population — ERP at 30 June 2025 by SA2 (density + crime denominators)",
     "prices": "Victorian Valuer-General — Median House/Unit by Suburb time series (2014-2024)",
     "rents": "DFFH Rental Report — moving annual median rents by suburb (LGA fallback), Sep 2025",
     "transport": "DTP annual train-station patronage (metro + V/Line) station locations, FY2024-25",
@@ -47,14 +48,20 @@ def build() -> None:
     names = {code: m["name"] for code, m in index.items()}
     points = geo.melbourne_sa2_points()
 
-    print("2/9 census (SEIFA + housing + demographics)")
+    print("2/9 census (SEIFA + housing + demographics) + ERP")
     seifa = census.get_seifa()
     housing = census.get_housing()
     demo = census.get_demographics()
+    erp_data = erp.get_erp()
+    # Current population: ERP (June 2025) with Census 2021 fallback. Density and
+    # crime denominators use this, so growth corridors aren't over-penalised.
+    pops = {}
+    for c in index:
+        e = erp_data.get(c)
+        pops[c] = e["erp"] if e else (seifa.get(c) or {}).get("population")
 
     print("3/9 crime (suburb-level + LGA fallback)")
     crime_lga = crime.get_crime()
-    pops = {c: (seifa.get(c) or {}).get("population") for c in index}
     lgas = {c: crime_lga[c].get("lga") for c in index}
     crime_sub = crime.get_crime_suburb(names, pops, lgas)
 
@@ -84,16 +91,23 @@ def build() -> None:
         sc = school_data.get(code, {})
         zn = zone_data.get(code, {})
         inf = infra_data.get(code, {})
-        crime_vals = cs if cs else cl
+        pop = pops.get(code)
+        area = s.get("area_sqkm")
+        # Employment precincts (airports, industrial estates): almost nobody lives
+        # there, so per-resident suburb rates are meaningless — use LGA rates.
+        precinct = pop is not None and pop < config.PRECINCT_POP_FLOOR
+        crime_vals = cs if (cs and not precinct) else cl
         records[code] = {
             "name": meta["name"], "sa3": meta["sa3"], "sa4": meta["sa4"],
             "lga": cl.get("lga"),
             "person_crime": crime_vals.get("person"), "property_crime": crime_vals.get("property"),
             "total_crime": crime_vals.get("total"),
-            "crime_source": "suburb" if cs else "lga",
+            "crime_source": "suburb" if (cs and not precinct) else "lga",
+            "precinct": precinct,
             "irsad_score": s.get("irsad_score"), "irsad_decile": s.get("irsad_decile"),
             "ieo_score": s.get("ieo_score"), "ieo_decile": s.get("ieo_decile"),
-            "population": s.get("population"), "density": s.get("density"),
+            "population": pop, "pop_year": (erp_data.get(code) or {}).get("erp_year"),
+            "density": (pop / area) if (pop and area) else None,
             "child_share": d.get("child_share"),
             "owner_occ": h.get("owner_occ"), "mortgage": h.get("mortgage"),
             "rental": h.get("rental"), "social": h.get("social"),

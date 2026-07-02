@@ -19,17 +19,19 @@ import bisect
 from . import config
 
 
-def _percentiles(values: dict[str, float | None], invert: bool = False) -> dict[str, float]:
-    """Map each value to its 0-100 percentile among the non-missing values."""
+def _percentiles(values: dict[str, float | None], invert: bool = False) -> dict[str, float | None]:
+    """Map each value to its 0-100 percentile among the non-missing values.
+
+    Missing stays None — the weighted blends renormalise over present inputs
+    instead of letting "no data" masquerade as a median suburb.
+    """
     present = [v for v in values.values() if v is not None]
-    if not present:
-        return {k: 50.0 for k in values}
     ordered = sorted(present)
     n = len(ordered)
-    out: dict[str, float] = {}
+    out: dict[str, float | None] = {}
     for k, v in values.items():
-        if v is None:
-            out[k] = 50.0
+        if v is None or n == 0:
+            out[k] = None
             continue
         lo = bisect.bisect_left(ordered, v)
         hi = bisect.bisect_right(ordered, v)
@@ -38,9 +40,13 @@ def _percentiles(values: dict[str, float | None], invert: bool = False) -> dict[
     return out
 
 
-def _weighted(norm: dict[str, float], weights: dict[str, float]) -> float:
-    total = sum(weights.values())
-    return round(sum(norm[k] * w for k, w in weights.items()) / total, 1)
+def _weighted(norm: dict[str, float | None], weights: dict[str, float]) -> tuple[float | None, int]:
+    """Weighted blend over the inputs that exist; returns (score, inputs_used)."""
+    used = {k: w for k, w in weights.items() if norm.get(k) is not None}
+    if not used:
+        return None, 0
+    total = sum(used.values())
+    return round(sum(norm[k] * w for k, w in used.items()) / total, 1), len(used)
 
 
 def _safest_pct(score: float) -> int:
@@ -48,24 +54,32 @@ def _safest_pct(score: float) -> int:
     return max(0, min(100, round(100 - score)))
 
 
-def _explain_live(p: dict, family: float, transit: dict) -> str:
-    s = p["person_safety"]["score"]
+def _explain_live(p: dict, family: float, transit: dict, r: dict) -> str:
+    if r.get("precinct"):
+        return ("An employment precinct (airport/industrial) with almost no residents — "
+                "liveability signals are shown for completeness but aren't meaningful here; "
+                "crime uses the surrounding LGA's rates.")
+    s = p["person_safety"]["score"] or 50
     safety = (f"among the safest {_safest_pct(s)}% of Greater Melbourne for crimes against the person"
               if s >= 78 else
               "lower-than-average personal-crime rates" if s >= 55 else
               "mid-range personal-crime rates" if s >= 40 else
               "elevated personal-crime rates by Melbourne standards")
+    # Per-resident caveat for CBD-style precincts with big visitor populations.
+    if (r.get("crime_source") == "suburb" and (r.get("person_crime") or 0) > 2500):
+        safety += (" (rates are per resident — precincts with large daytime/visitor "
+                   "crowds overstate day-to-day risk)")
     dec = p["seifa"]["decile"] or 0
     seifa = ("a high socio-economic profile (SEIFA decile " + str(dec) + ")" if dec >= 8 else
              "a below-average socio-economic profile (SEIFA decile " + str(dec) + ")" if dec <= 3 else
              "a mid-range socio-economic profile (SEIFA decile " + str(dec) + ")")
     prop = (" Property crime runs higher here, typically retail/transport precincts rather than homes."
-            if p["property_safety"]["score"] < 35 else "")
+            if (p["property_safety"]["score"] or 50) < 35 else "")
     km, st = transit.get("nearest_station_km"), transit.get("nearest_station")
     train = (f" {st} station is ~{km} km away." if km is not None and km <= 2.5 and st else
              f" Note: the nearest train station ({st}) is ~{km} km away." if km is not None and km > 6 and st
              else "")
-    fam = " It also reads as family-friendly." if family >= 70 else ""
+    fam = " It also reads as family-friendly." if (family or 0) >= 70 else ""
     safety = safety[0].upper() + safety[1:]
     return f"{safety}, with {seifa}.{prop}{train}{fam}"
 
@@ -169,27 +183,31 @@ def _zoning_label(z: dict | None) -> str | None:
     return "Standard residential"
 
 
-def _tags(p: dict, family: float, seifa_dec: int, dev: float, market: dict,
-          infra_score: float, transit: dict, z: dict | None) -> list[str]:
+def _tags(p: dict, family: float | None, seifa_dec: int, dev: float, market: dict,
+          infra_score: float | None, transit: dict, z: dict | None,
+          precinct: bool = False) -> list[str]:
     """Up to 5 salient, plain-English chips (ordered by salience)."""
+    sc = lambda key: p[key]["score"] if p[key]["score"] is not None else 50  # noqa: E731
     t = []
-    ps = p["person_safety"]["score"]
-    if ps >= 85: t.append("Very safe")
-    elif ps >= 65: t.append("Safe")
-    if seifa_dec >= 9 and ps >= 78: t.append("Blue-chip")
-    elif seifa_dec >= 8: t.append("Affluent")
-    if family >= 72: t.append("Family-friendly")
+    if precinct: t.append("Employment precinct")
+    ps = sc("person_safety")
+    if not precinct:
+        if ps >= 85: t.append("Very safe")
+        elif ps >= 65: t.append("Safe")
+        if seifa_dec >= 9 and ps >= 78: t.append("Blue-chip")
+        elif seifa_dec >= 8: t.append("Affluent")
+        if (family or 0) >= 72: t.append("Family-friendly")
     if z and z["growth_share"] >= 0.20: t.append("Zoned for growth")
     if (transit.get("nearest_station_km") or 99) <= 1.2: t.append("Near train")
-    if dev >= 70 and p["child"]["score"] >= 60: t.append("Growth corridor")
-    if infra_score >= 72: t.append("Grid-ready")
-    if p["detached"]["score"] >= 72: t.append("Redevelopment headroom")
+    if dev >= 70 and sc("child") >= 60: t.append("Growth corridor")
+    if (infra_score or 0) >= 72: t.append("Grid-ready")
+    if sc("detached") >= 72: t.append("Redevelopment headroom")
     if z and z["heritage_share"] >= 0.25: t.append("Heritage constrained")
     if (market.get("yield_house") or 0) >= 4.2: t.append("Strong yield")
-    if p["rental"]["score"] >= 72: t.append("High rental demand")
-    if p["owner_occ"]["score"] >= 72 and p["rental"]["score"] <= 35: t.append("Tightly held")
-    if p["low_density"]["score"] >= 72: t.append("Low density")
-    elif p["low_density"]["score"] <= 22: t.append("Built-up")
+    if sc("rental") >= 72: t.append("High rental demand")
+    if sc("owner_occ") >= 72 and sc("rental") <= 35: t.append("Tightly held")
+    if sc("low_density") >= 72: t.append("Low density")
+    elif p["low_density"]["score"] is not None and p["low_density"]["score"] <= 22: t.append("Built-up")
     if market.get("growth_signal") == "Strong": t.append("Strong growth")
     if market.get("value_signal") == "Affordable" and dev >= 55: t.append("Affordable upside")
     elif market.get("value_signal") == "Premium": t.append("Premium market")
@@ -228,16 +246,18 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         "yield": _percentiles(g("yield_house")),
     }
 
-    out: dict[str, dict] = {}
+    # ---- pass 1: sub-scores + raw weighted composites -----------------------
+    interim: dict[str, dict] = {}
     for c in codes:
-        r = records[c]
-        schools_score = _weighted({
+        schools_score, _ = _weighted({
             "primary": n["school_prim"][c], "secondary": n["school_sec"][c],
             "density": n["school_dens"][c],
         }, config.SCHOOL_WEIGHTS)
         # station access: proximity leads, density adds inner-network depth
-        transport_score = round(0.75 * n["station_prox"][c] + 0.25 * n["station_dens"][c], 1)
-        family = _weighted(
+        transport_score, _ = _weighted(
+            {"prox": n["station_prox"][c], "dens": n["station_dens"][c]},
+            {"prox": 0.75, "dens": 0.25})
+        family, _ = _weighted(
             {"child": n["child"][c], "ieo": n["ieo"][c],
              "person_safety": n["person_safety"][c], "schools": schools_score},
             config.FAMILY_WEIGHTS)
@@ -248,20 +268,51 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "family_child": n["child"][c], "transport": transport_score,
             "schools": schools_score,
         }
-        live = _weighted(live_norm, config.LIVE_WEIGHTS)               # base (Balanced/Invest)
-        live_family = _weighted(live_norm, config.LIVE_WEIGHTS_FAMILY)  # Live / Family-First
-        infra_score = _weighted({
+        live_raw, live_used = _weighted(live_norm, config.LIVE_WEIGHTS)
+        live_family_raw, _ = _weighted(live_norm, config.LIVE_WEIGHTS_FAMILY)
+        infra_score, _ = _weighted({
             "transmission": n["trans_prox"][c], "substation": n["sub_prox"][c],
             "density": n["sub_dens"][c],
         }, config.INFRA_WEIGHTS)
-        dev = _weighted({
+        dev_raw, dev_used = _weighted({
             "detached_share": n["detached"][c], "zoning": n["zoning"][c],
             "growth": n["growth"][c], "infra": infra_score,
             "station": n["station_prox"][c], "yield": n["yield"][c],
             "rental_share": n["rental"][c], "low_density": n["low_density"][c],
             "heritage_free": n["heritage_free"][c],
         }, config.DEV_WEIGHTS)
-        overall = round(config.DEFAULT_BLEND["live"] * live + config.DEFAULT_BLEND["dev"] * dev, 1)
+        interim[c] = {
+            "schools_score": schools_score, "transport_score": transport_score,
+            "family": family, "infra_score": infra_score,
+            "live_raw": live_raw, "live_family_raw": live_family_raw, "dev_raw": dev_raw,
+            "live_used": live_used, "dev_used": dev_used,
+        }
+
+    # ---- composite stretch ---------------------------------------------------
+    # Averaging many percentile inputs regresses toward 50 (the old build had an
+    # interquartile dev range of just 44-56 and produced zero A grades). Re-rank
+    # the composites so Live/Dev use the full 0-100 range; grades become
+    # distribution tiers via the percentile of the default-blend Overall.
+    live_s = _percentiles({c: interim[c]["live_raw"] for c in codes})
+    livef_s = _percentiles({c: interim[c]["live_family_raw"] for c in codes})
+    dev_s = _percentiles({c: interim[c]["dev_raw"] for c in codes})
+    overall_val = {c: (round(config.DEFAULT_BLEND["live"] * live_s[c]
+                             + config.DEFAULT_BLEND["dev"] * dev_s[c], 1)
+                       if live_s[c] is not None and dev_s[c] is not None else None)
+                   for c in codes}
+    overall_pct = _percentiles(overall_val)
+
+    # ---- pass 2: assemble output ---------------------------------------------
+    out: dict[str, dict] = {}
+    for c in codes:
+        r = records[c]
+        im = interim[c]
+        schools_score, transport_score = im["schools_score"], im["transport_score"]
+        family, infra_score = im["family"], im["infra_score"]
+        live = live_s[c] if live_s[c] is not None else 50.0
+        live_family = livef_s[c] if livef_s[c] is not None else 50.0
+        dev = dev_s[c] if dev_s[c] is not None else 50.0
+        overall = overall_val[c] if overall_val[c] is not None else 50.0
 
         pillars = {
             "person_safety": {"score": n["person_safety"][c], "raw": r.get("person_crime")},
@@ -282,8 +333,8 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "yield": {"score": n["yield"][c], "raw": r.get("yield_house")},
         }
         seifa_dec = r.get("irsad_decile") or 0
-        fam_label = ("Family-friendly" if family >= 72 else
-                     "OK for families" if family >= 50 else "Less family-oriented")
+        fam_label = ("Family-friendly" if (family or 0) >= 72 else
+                     "OK for families" if (family or 0) >= 50 else "Less family-oriented")
         market = {
             "median_house": r.get("median_house"), "median_unit": r.get("median_unit"),
             "house_12m": r.get("house_12m"), "house_3yr_cagr": r.get("house_3yr_cagr"),
@@ -299,7 +350,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         }
         infra = {
             "score": infra_score,
-            "advantage": _infra_signal(infra_score),
+            "advantage": _infra_signal(infra_score) if infra_score is not None else "n/a",
             "nearest_transmission_km": r.get("nearest_transmission_km"),
             "nearest_substation_km": r.get("nearest_substation_km"),
             "substation_count_10km": r.get("substation_count_10km"),
@@ -335,12 +386,18 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "rent": r.get("rent_source"),                # "suburb" | "lga" | None
             "crime": r.get("crime_source") or "lga",     # "suburb" | "lga"
             "zoning": r.get("zoning_raw") is not None,
+            "live_inputs": [im["live_used"], len(config.LIVE_WEIGHTS)],
+            "dev_inputs": [im["dev_used"], len(config.DEV_WEIGHTS)],
         }
+        precinct = bool(r.get("precinct"))
         out[c] = {
             "name": r.get("name"), "sa3": r.get("sa3"), "sa4": r.get("sa4"),
             "lga": r.get("lga"), "population": r.get("population"),
+            "pop_year": r.get("pop_year"),
+            "precinct": precinct,
             "live": live, "live_family": live_family, "dev": dev,
-            "overall": overall, "grade": config.grade_for(overall),
+            # grade = distribution tier of the default-blend Overall (A+ = top ~10%)
+            "overall": overall, "grade": config.grade_for(overall_pct[c] if overall_pct[c] is not None else 50.0),
             "family": {"score": family, "label": fam_label},
             "market": market,
             "infra": infra,
@@ -349,10 +406,10 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "zoning": zoning,
             "coverage": coverage,
             "pillars": pillars,
-            "explanation_live": _explain_live(pillars, family, transit),
+            "explanation_live": _explain_live(pillars, family, transit, r),
             "explanation_dev": _explain_dev(pillars, zraw, transit),
             "explanation_invest": _explain_invest(market),
             "explanation_infra": _explain_infra(infra),
-            "tags": _tags(pillars, family, seifa_dec, dev, market, infra_score, transit, zraw),
+            "tags": _tags(pillars, family, seifa_dec, dev, market, infra_score, transit, zraw, precinct),
         }
     return out

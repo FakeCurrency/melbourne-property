@@ -79,6 +79,7 @@
   const style = f => {
     const a = A[f.properties.sa2_code]; if (!a) return { fillColor: "#bbb", fillOpacity: .25, weight: .5, color: "#fff" };
     const v = metricOf(a), sel = f.properties.sa2_code === selected;
+    if (v == null) return { weight: sel ? 2.6 : .5, color: sel ? "#0a84ff" : "#ffffff", fillColor: "#9a9aa0", fillOpacity: .18 };
     return { weight: sel ? 2.6 : .5, color: sel ? "#0a84ff" : "#ffffff", fillColor: col(v), fillOpacity: v >= minScore ? .84 : .08 };
   };
   const layer = L.geoJSON(geo, {
@@ -125,7 +126,10 @@
     "Heritage freedom": "Inverse of Heritage Overlay coverage — heritage controls constrain redevelopment.",
   };
   const bar = (label, score, valText, sub) =>
-    `<div class="pill${sub ? " sub" : ""}" title="${PILL_TIPS[label] || ""}"><span class="pl">${label}</span>
+    score == null
+      ? `<div class="pill${sub ? " sub" : ""} nodata" title="${PILL_TIPS[label] || ""} No data for this area — excluded from the score (weights renormalised).">
+          <span class="pl">${label}</span><span class="bar"></span><span class="pv">no data</span></div>`
+      : `<div class="pill${sub ? " sub" : ""}" title="${PILL_TIPS[label] || ""}"><span class="pl">${label}</span>
       <span class="bar"><i style="width:${score}%;background:${col(score)}"></i></span>
       <span class="pv">${valText}</span></div>`;
 
@@ -252,8 +256,8 @@
     sc.innerHTML = `
       <div class="sc-head">
         <div><h2 class="sc-name">${a.name}</h2>
-          <p class="sc-sub">${a.sa3 || ""} · ${a.lga || ""}${a.population ? " · pop " + a.population.toLocaleString() : ""}</p></div>
-        <span class="grade" style="background:${gradeColor(a.grade)}">${a.grade}</span>
+          <p class="sc-sub">${a.sa3 || ""} · ${a.lga || ""}${a.population ? " · pop " + a.population.toLocaleString() + (a.pop_year ? " (" + a.pop_year + ")" : "") : ""}</p></div>
+        <span class="grade" title="Relative tier of the Overall score at the default blend: A+ = top ~10% of Greater Melbourne" style="background:${gradeColor(a.grade)}">${a.grade}</span>
       </div>
       <div class="chips">${chips}</div>
       <p class="bestfor"><b>Best for:</b> ${bestFor(a)}.
@@ -350,7 +354,10 @@
     else if (!c.rent) notes.push("rent: no data");
     if (!c.price) notes.push("price: no VG match");
     if (!c.zoning) notes.push("zoning: no sample");
-    return `<p class="covnote" title="How fine-grained each source is for this exact area">Data coverage — ${notes.join(" · ")}</p>`;
+    const li = c.live_inputs, di = c.dev_inputs;
+    if (li && li[0] < li[1]) notes.push(`liveability scored on ${li[0]}/${li[1]} inputs`);
+    if (di && di[0] < di[1]) notes.push(`development scored on ${di[0]}/${di[1]} inputs`);
+    return `<p class="covnote" title="How fine-grained each source is for this exact area. Missing inputs are excluded and the remaining weights renormalised — they never count as 'average'.">Data coverage — ${notes.join(" · ")}</p>`;
   }
 
   function select(code, fly) {
@@ -457,7 +464,7 @@
     const b = BEST[kind];
     mode = b.mode; colorBy = b.colorBy; wLive = b.wLive; activePreset = null; activeBest = kind;
     setSlider();
-    const ranked = entries.slice().sort((x, y) => metricOf(y[1]) - metricOf(x[1]));
+    const ranked = entries.slice().sort((x, y) => metricRank(y[1]) - metricRank(x[1]));
     minScore = Math.max(0, Math.min(90, Math.floor(metricOf(ranked[Math.min(19, ranked.length - 1)][1]))));
     setMinSlider(); highlightModes(); refresh();
     select(ranked[0][0], true);
@@ -505,9 +512,10 @@
     el.querySelector(".lg-help").onclick = () => openGuide("map");
   }
   const entries = Object.entries(A);
+  const metricRank = a => { const v = metricOf(a); return v == null ? -1 : v; };  // null sorts last
   function updateLists() {
     document.getElementById("listLabel").textContent = LABELS[colorBy];
-    const top = entries.slice().sort((x, y) => metricOf(y[1]) - metricOf(x[1])).slice(0, 12);
+    const top = entries.slice().sort((x, y) => metricRank(y[1]) - metricRank(x[1])).slice(0, 12);
     const list = document.getElementById("topList");
     list.innerHTML = top.map(([code, a], i) =>
       `<li data-code="${code}"><span class="rk">${i + 1}</span><span class="nm">${a.name}</span>
@@ -536,7 +544,7 @@
     const p = new URLSearchParams(h);
     if (p.get("m") && MODE_PRESETS[p.get("m")] != null) mode = p.get("m");
     if (p.get("w") != null && !isNaN(+p.get("w"))) wLive = Math.max(0, Math.min(100, +p.get("w"))) / 100;
-    if (p.get("c")) colorBy = p.get("c");
+    if (p.get("c") && COLORBY.some(([k]) => k === p.get("c"))) colorBy = p.get("c");
     if (p.get("min") != null) minScore = Math.max(0, Math.min(90, +p.get("min") || 0));
     if (p.get("vs") && A[p.get("vs")]) compareWith = p.get("vs");
     return p.get("s") && A[p.get("s")] ? p.get("s") : true;

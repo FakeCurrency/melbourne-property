@@ -131,8 +131,15 @@ PRESETS = [
      "blurb": "Surfaces redevelopment headroom and the growth corridors."},
 ]
 
-# Letter grades from a 0-100 score.
-GRADE_CUTOFFS = [("A+", 85), ("A", 72), ("B", 58), ("C", 42), ("D", 0)]
+# SA2s with fewer residents than this are employment precincts (airports,
+# industrial estates): per-resident crime rates are meaningless there, so they
+# fall back to LGA rates and wear an "Employment precinct" flag.
+PRECINCT_POP_FLOOR = 500
+
+# Letter grades. Applied to the *percentile* of the default-blend Overall, so
+# they are relative tiers: A+ = top ~10% of Greater Melbourne, A = next 15%,
+# B = next 20%, C = next 25%, D = bottom ~30%.
+GRADE_CUTOFFS = [("A+", 90), ("A", 75), ("B", 55), ("C", 30), ("D", 0)]
 
 
 def grade_for(score: float) -> str:
