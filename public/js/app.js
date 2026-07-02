@@ -1,8 +1,11 @@
 /* Melbourne Property — map, audience modes, one-click presets, scorecards. */
 (async function () {
+  // Versioned data URLs: keeps code + data cache-coherent on GitHub Pages
+  // (bump together with the ?v= asset versions in index.html).
+  const DATA_V = "17";
   const [geo, data] = await Promise.all([
-    fetch("data/melbourne.geojson").then(r => r.json()),
-    fetch("data/scores.json").then(r => r.json()),
+    fetch("data/melbourne.geojson?v=" + DATA_V).then(r => r.json()),
+    fetch("data/scores.json?v=" + DATA_V).then(r => r.json()),
   ]);
   const A = data.areas;
   const MODE_PRESETS = data.mode_presets || { live: 0.85, balanced: 0.5, invest: 0.2 };
@@ -91,10 +94,10 @@
     { subdomains: "abcd", pane: "markerPane", opacity: .85 });
 
   const style = f => {
-    const a = A[f.properties.sa2_code]; if (!a) return { fillColor: "#bbb", fillOpacity: .25, weight: .5, color: "#fff" };
+    const a = A[f.properties.sa2_code]; if (!a) return { fillColor: "#bbb", fillOpacity: .25, weight: .6, color: "rgba(255,255,255,.5)" };
     const v = metricOf(a), sel = f.properties.sa2_code === selected;
-    if (v == null) return { weight: sel ? 2.6 : .5, color: sel ? "#0a84ff" : "#ffffff", fillColor: "#9a9aa0", fillOpacity: .18 };
-    return { weight: sel ? 2.6 : .5, color: sel ? "#0a84ff" : "#ffffff", fillColor: col(v), fillOpacity: v >= minScore ? .84 : .08 };
+    if (v == null) return { weight: sel ? 2.4 : .6, color: sel ? "#0a84ff" : "rgba(255,255,255,.5)", fillColor: "#9a9aa0", fillOpacity: .18 };
+    return { weight: sel ? 2.4 : .6, color: sel ? "#0a84ff" : "rgba(255,255,255,.5)", fillColor: col(v), fillOpacity: v >= minScore ? .8 : .07 };
   };
   const layer = L.geoJSON(geo, {
     style,
@@ -120,6 +123,25 @@
 
   // ---- scorecard --------------------------------------------------------
   const gradeColor = g => ({ "A+": "#248a3d", "A": "#34c759", "B": "#ffcc00", "C": "#ff9500", "D": "#ff3b30" }[g] || "#8e8e93");
+  // tinted grade capsule (iOS style): soft background, saturated readable text
+  const GRADE_TINT = {
+    "A+": ["rgba(52,199,89,.18)", "#1d9a44"], "A": ["rgba(52,199,89,.15)", "#28a04d"],
+    "B": ["rgba(255,204,0,.22)", "#9a7b00"], "C": ["rgba(255,149,0,.16)", "#c07000"],
+    "D": ["rgba(255,59,48,.14)", "#d63a30"],
+  };
+  const gradeStyle = g => { const t = GRADE_TINT[g] || ["rgba(142,142,147,.16)", "#8e8e93"]; return `background:${t[0]};color:${t[1]}`; };
+  // Apple-style ring gauges for the three headline scores
+  const RING_C = 2 * Math.PI * 26;
+  const ring = (label, val, color) => `
+    <div class="ring" title="${label} ${val} — rank-based: higher than ${Math.round(val)}% of Greater Melbourne">
+      <div class="ring-g"><svg viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="ring-track" cx="32" cy="32" r="26"/>
+        <circle class="ring-fill" cx="32" cy="32" r="26" stroke="${color}"
+          stroke-dasharray="${Math.max(2.5, val / 100 * RING_C).toFixed(1)} ${RING_C.toFixed(1)}"
+          transform="rotate(-90 32 32)"/>
+      </svg><span class="ring-num">${Math.round(val)}</span></div>
+      <span class="ring-lab">${label}</span>
+    </div>`;
   const sc = document.getElementById("scorecard");
   const PILL_TIPS = {
     "Personal safety": "Rate of crimes against the person (assault, robbery, sexual offences). Greener = lower than most suburbs.",
@@ -287,17 +309,17 @@
       <div class="sc-head">
         <div><h2 class="sc-name">${a.name}</h2>
           <p class="sc-sub">${a.sa3 || ""} · ${a.lga || ""}${a.population ? " · pop " + a.population.toLocaleString() + (a.pop_year ? " (" + a.pop_year + ")" : "") : ""}</p></div>
-        <span class="grade" title="Relative tier of the Overall score at the default blend: A+ = top ~10% of Greater Melbourne" style="background:${gradeColor(a.grade)}">${a.grade}</span>
+        <span class="grade" title="Relative tier of the Overall score at the default blend: A+ = top ~10% of Greater Melbourne" style="${gradeStyle(a.grade)}">${a.grade}</span>
       </div>
       <div class="chips">${chips}</div>
       <p class="bestfor"><b>Best for:</b> ${bestFor(a)}.
         <button class="cmp-btn" id="cmpBtn" title="Compare this suburb side-by-side with another">${IC.cmp} Compare</button></p>
       ${comparePicking ? `<p class="cmp-hint">Now tap a second suburb on the map, list or search…
         <button class="cmp-x" id="cmpCancel">cancel</button></p>` : ""}
-      <div class="bigrow">
-        <div class="big" style="background:${rampColor(lv, "live")}"><div class="lab">${liveLab}${customW ? " ·custom" : ""}</div><div class="num">${lv}</div></div>
-        <div class="big" style="background:${rampColor(devOf(a), "invest")}"><div class="lab">Development${customW ? " ·custom" : ""}</div><div class="num">${devOf(a)}</div></div>
-        <div class="big" style="background:${col(ov)}"><div class="lab">Overall</div><div class="num">${ov}</div></div>
+      <div class="rings">
+        ${ring(liveLab + (customW ? " · custom" : ""), lv, "var(--green)")}
+        ${ring("Development" + (customW ? " · custom" : ""), devOf(a), "var(--indigo)")}
+        ${ring("Overall", ov, "var(--accent)")}
       </div>
       ${prominent ? `<div class="sublens" title="Two different development stories: Greenfield = estate-scale corridor build-out (UGZ precincts); Infill = upzoned, station-centred redevelopment in established suburbs.">
         <span>Greenfield <b style="color:${col(a.dev_green)}">${a.dev_green}</b></span>
@@ -355,8 +377,8 @@
         <button class="cmp-x big" id="cmpExit" title="Exit compare">×</button>
       </div>
       <div class="cmp-row cmp-titles"><span class="cmp-l"></span>
-        <span class="cmp-v"><b>${a.name}</b><span class="grade gmini" style="background:${gradeColor(a.grade)}">${a.grade}</span></span>
-        <span class="cmp-v"><b>${b.name}</b><span class="grade gmini" style="background:${gradeColor(b.grade)}">${b.grade}</span></span></div>
+        <span class="cmp-v"><b>${a.name}</b><span class="grade gmini" style="${gradeStyle(a.grade)}">${a.grade}</span></span>
+        <span class="cmp-v"><b>${b.name}</b><span class="grade gmini" style="${gradeStyle(b.grade)}">${b.grade}</span></span></div>
       ${row("Liveability", lvA, lvB, num(lvA, lvB))}
       ${row("Development", devOf(a), devOf(b), num(devOf(a), devOf(b)))}
       ${row("Greenfield / Infill", `${a.dev_green} / ${a.dev_infill}`, `${b.dev_green} / ${b.dev_infill}`)}
@@ -775,6 +797,11 @@
         d.onclick = () => { select(code, true); search.value = A[code].name; closeSearch(); };
         results.appendChild(d);
       });
+      if (!rows.length) {
+        const d = document.createElement("div"); d.className = "res nores";
+        d.innerHTML = `<span>No suburbs for postcode “${q}”</span><small>try the name</small>`;
+        results.appendChild(d);
+      }
       return;
     }
     entries.filter(([, a]) => a.name.toLowerCase().includes(q)).slice(0, 8).forEach(([code, a]) => {
@@ -805,7 +832,7 @@
   const kvWeight = kv => kv >= 350 ? 3 : kv >= 200 ? 2.2 : kv >= 100 ? 1.6 : 1.1;
   async function ensureElec() {
     if (elecLayer) return elecLayer;
-    const gj = await fetch("data/electricity.geojson").then(r => r.json());
+    const gj = await fetch("data/electricity.geojson?v=" + DATA_V).then(r => r.json());
     elecLayer = L.geoJSON(gj, {
       style: f => f.geometry.type === "LineString"
         ? { color: kvColor(f.properties.kv || 0), weight: kvWeight(f.properties.kv || 0), opacity: .85 } : {},
@@ -823,7 +850,7 @@
   let stnLayer = null;
   async function ensureStations() {
     if (stnLayer) return stnLayer;
-    const gj = await fetch("data/stations.geojson").then(r => r.json());
+    const gj = await fetch("data/stations.geojson?v=" + DATA_V).then(r => r.json());
     stnLayer = L.geoJSON(gj, {
       pointToLayer: (f, ll) => L.circleMarker(ll, {
         radius: f.properties.kind === "metro" ? 3.5 : 4.5,

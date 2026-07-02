@@ -13,12 +13,14 @@
   --fill1:rgba(120,120,128,.2); --fill2:rgba(120,120,128,.16);
   --fill3:rgba(118,118,128,.12); --chip:rgba(120,120,128,.10);
   --chip-on:rgba(120,120,128,.16);
+  --indigo:#5856d6;
   --glass:rgba(249,249,249,.80); --glass-solid:#fff; --page:#f2f2f7;
+  --card:#fff; --shadow-card:0 1px 2px rgba(0,0,0,.04),0 5px 16px rgba(0,0,0,.06);
   --glass-brd:rgba(0,0,0,.04); --line:rgba(60,60,67,.13);
   --bar-bg:rgba(120,120,128,.14); --map-bg:#e8ecf0;
   --seg-track:rgba(118,118,128,.12); --seg-on:#fff;
-  --shadow:0 8px 28px rgba(0,0,0,.13),0 1px 3px rgba(0,0,0,.06);
-  --radius:16px;
+  --shadow:0 12px 36px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.05),inset 0 1px 0 rgba(255,255,255,.6);
+  --radius:20px;
   --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --disp:var(--sans);
 }
@@ -32,11 +34,13 @@
   --fill1:rgba(120,120,128,.44); --fill2:rgba(120,120,128,.36);
   --fill3:rgba(118,118,128,.28); --chip:rgba(120,120,128,.22);
   --chip-on:rgba(120,120,128,.34);
+  --indigo:#5e5ce6;
   --glass:rgba(28,28,30,.76); --glass-solid:#1c1c1e; --page:#000;
+  --card:#2c2c2e; --shadow-card:0 1px 2px rgba(0,0,0,.3),0 5px 16px rgba(0,0,0,.35);
   --glass-brd:rgba(255,255,255,.08); --line:rgba(84,84,88,.55);
   --bar-bg:rgba(120,120,128,.26); --map-bg:#0b0d10;
   --seg-track:rgba(118,118,128,.24); --seg-on:#636366;
-  --shadow:0 10px 34px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
+  --shadow:0 14px 40px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.07);
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -58,8 +62,8 @@ body{font:15px/1.45 var(--sans);color:var(--ink);background:var(--map-bg);
   backdrop-filter:blur(24px) saturate(1.8);border:1px solid var(--glass-brd);box-shadow:var(--shadow)}
 
 /* ---------- top navigation bar ---------- */
-#topbar{position:fixed;top:12px;left:12px;right:12px;height:54px;z-index:600;border-radius:14px;
-  display:flex;align-items:center;gap:12px;padding:0 12px}
+#topbar{position:fixed;top:12px;left:12px;right:12px;height:56px;z-index:600;border-radius:16px;
+  display:flex;align-items:center;gap:12px;padding:0 14px}
 .brand{display:flex;align-items:center;gap:7px;font-weight:600;
   font-size:17px;letter-spacing:-.4px;white-space:nowrap}
 .brand .mark{color:var(--accent);line-height:1}
@@ -160,7 +164,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 /* scorecard */
 #scorecard.empty .placeholder{color:var(--ink2);font-size:14px;text-align:center;margin:18px 8px;line-height:1.5}
 .sc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.sc-name{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0}
+.sc-name{font-size:24px;font-weight:700;letter-spacing:-.55px;margin:0}
 .sc-sub{color:var(--ink2);font-size:13px;margin:2px 0 0;letter-spacing:-.1px}
 .grade{font-size:13px;font-weight:700;color:#fff;padding:4px 11px;border-radius:100px}
 .bestfor{margin:10px 0 2px;font-size:13px;background:var(--fill3);border-radius:12px;padding:10px 12px;letter-spacing:-.1px}
@@ -185,8 +189,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .summary{margin:10px 0 0;font-size:13px;color:var(--ink);background:var(--fill3);border-radius:12px;padding:10px 12px;line-height:1.5;letter-spacing:-.1px}
 .summary.dev{box-shadow:inset 3px 0 0 var(--accent)}
 
-/* market & infra blocks — inset grouped cards */
-.market{background:var(--fill3);border-radius:12px;padding:11px 13px;margin:11px 0 2px}
+/* market & infra blocks — elevated cards */
+.market{background:var(--card);border-radius:14px;padding:12px 14px;margin:12px 0 2px;box-shadow:var(--shadow-card)}
 .market.mini{background:transparent;border-top:.5px solid var(--line);border-radius:0;padding:10px 0 0;margin-top:10px}
 .market-h{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2);font-weight:600;
   display:flex;justify-content:space-between;align-items:center}
@@ -417,3 +421,45 @@ button,.preset,.cby button,.best-btn,.about-tab{transition:transform .12s ease,b
 .tnm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tkm{color:var(--ink);font-variant-numeric:tabular-nums}
 .tpax{color:var(--ink3);font-size:11px;font-variant-numeric:tabular-nums}
+
+/* --- premium pass: rings, icon tiles, hidden scrollbars, lifts ------------- */
+/* Apple-style ring gauges for the headline scores */
+.rings{display:flex;justify-content:space-around;gap:6px;margin:14px 0 4px;background:var(--card);
+  border-radius:14px;padding:14px 6px 12px;box-shadow:var(--shadow-card)}
+.ring{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;cursor:help}
+.ring-g{position:relative;width:76px;height:76px}
+.ring-g svg{width:76px;height:76px;display:block}
+.ring-track{fill:none;stroke:var(--fill3);stroke-width:7}
+.ring-fill{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-dasharray .5s cubic-bezier(.3,.7,.3,1)}
+.ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:21px;font-weight:700;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.ring-lab{font-size:10.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;
+  letter-spacing:.3px;text-align:center;max-width:96px;line-height:1.25}
+
+/* icon tiles inside the best buttons (Settings-style) */
+.best-btn .bi{width:34px;height:34px;border-radius:10px;background:var(--tint);color:var(--accent);
+  display:flex;align-items:center;justify-content:center}
+.best-btn.on .bi{background:rgba(255,255,255,.24);color:#fff}
+
+/* hover lift on tappable cards */
+.preset:hover,.best-btn:hover,.market:hover{transform:translateY(-1px)}
+.market{transition:transform .15s ease,box-shadow .15s ease}
+.market:hover{box-shadow:0 2px 4px rgba(0,0,0,.05),0 10px 24px rgba(0,0,0,.09)}
+.market.mini:hover{transform:none;box-shadow:none}
+
+/* hide scrollbars — panels scroll, chrome stays clean */
+#dock,#infopanel,.about-modal,.weights-modal{scrollbar-width:none}
+#dock::-webkit-scrollbar,#infopanel::-webkit-scrollbar,
+.about-modal::-webkit-scrollbar,.weights-modal::-webkit-scrollbar{display:none}
+
+/* refined summary + bestfor cards */
+.bestfor,.summary{background:var(--card);box-shadow:var(--shadow-card)}
+.summary{border-radius:12px}
+[data-theme="dark"] .bestfor,[data-theme="dark"] .summary{background:var(--card)}
+
+/* postcode no-result row */
+#results .res.nores{cursor:default;color:var(--ink2)}
+#results .res.nores:hover{background:transparent}
+
+/* grade capsule refinement (tint set inline) */
+.grade{font-weight:700;letter-spacing:0}
