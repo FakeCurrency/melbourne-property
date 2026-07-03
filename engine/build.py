@@ -48,10 +48,15 @@ def build() -> None:
     names = {code: m["name"] for code, m in index.items()}
     points = geo.melbourne_sa2_points()
 
-    print("2/9 census (SEIFA + housing + demographics) + ERP")
+    print("2/9 census (SEIFA + housing + demographics + income) + ERP")
     seifa = census.get_seifa()
     housing = census.get_housing()
     demo = census.get_demographics()
+    try:
+        income = census.get_income()
+    except Exception as e:  # noqa: BLE001 - affordability degrades gracefully
+        print(f"  income unavailable ({e}); shipping without affordability ratios")
+        income = {}
     erp_data = erp.get_erp()
     # Current population: ERP (June 2025) with Census 2021 fallback. Density and
     # crime denominators use this, so growth corridors aren't over-penalised.
@@ -109,11 +114,14 @@ def build() -> None:
             "lga": cl.get("lga"),
             "person_crime": crime_vals.get("person"), "property_crime": crime_vals.get("property"),
             "total_crime": crime_vals.get("total"),
+            "person_trend_pct": cs.get("person_trend_pct") if (cs and not precinct) else None,
             "crime_source": "suburb" if (cs and not precinct) else "lga",
             "precinct": precinct,
             "irsad_score": s.get("irsad_score"), "irsad_decile": s.get("irsad_decile"),
             "ieo_score": s.get("ieo_score"), "ieo_decile": s.get("ieo_decile"),
             "population": pop, "pop_year": (erp_data.get(code) or {}).get("erp_year"),
+            "pop_growth_pct": (erp_data.get(code) or {}).get("erp_growth_pct"),
+            "income_weekly": (income.get(code) or {}).get("income_weekly"),
             "density": (pop / area) if (pop and area) else None,
             "child_share": d.get("child_share"),
             "owner_occ": h.get("owner_occ"), "mortgage": h.get("mortgage"),
@@ -121,9 +129,11 @@ def build() -> None:
             "detached": h.get("detached"),
             "median_house": pr.get("median_house"), "median_unit": pr.get("median_unit"),
             "house_12m": pr.get("house_12m"), "house_3yr_cagr": pr.get("house_3yr_cagr"),
+            "unit_12m": pr.get("unit_12m"), "unit_3yr_cagr": pr.get("unit_3yr_cagr"),
             "house_year": pr.get("house_year"), "unit_year": pr.get("unit_year"),
             "house_series": pr.get("house_series"),
             "rent_weekly": rn.get("rent_weekly"), "rent_12m": rn.get("rent_12m"),
+            "rent_bonds": rn.get("rent_bonds"),
             "rent_quarter": rn.get("rent_quarter"), "rent_source": rn.get("rent_source"),
             "yield_house": _yield_pct(rn.get("house_rent"), pr.get("median_house")),
             "yield_unit": _yield_pct(rn.get("flat_rent"), pr.get("median_unit")),
@@ -145,8 +155,9 @@ def build() -> None:
             "zoning_raw": zn.get("zoning_raw"),
             "growth_share": zn.get("growth_share"), "standard_share": zn.get("standard_share"),
             "restrict_share": zn.get("restrict_share"), "heritage_share": zn.get("heritage_share"),
-            "ugz_share": zn.get("ugz_share"),
+            "ugz_share": zn.get("ugz_share"), "parks_share": zn.get("parks_share"),
             "flood_share": zn.get("flood_share"), "bushfire_share": zn.get("bushfire_share"),
+            "noise_share": zn.get("noise_share"),
             "zone_mix": zn.get("zone_mix"),
             "nearest_transmission_km": inf.get("nearest_transmission_km"),
             "nearest_substation_km": inf.get("nearest_substation_km"),

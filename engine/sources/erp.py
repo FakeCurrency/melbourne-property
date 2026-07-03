@@ -19,16 +19,25 @@ from ..fetch import fetch
 
 ERP_URL = ("https://www.abs.gov.au/statistics/people/population/regional-population/"
            "2024-25/32180DS0001_2024-25.xlsx")
+# Next release's URL, tried first so the data self-upgrades when ABS publishes
+# (typically each March); falls back to the pinned URL above.
+ERP_NEXT_URL = ("https://www.abs.gov.au/statistics/people/population/regional-population/"
+                "2025-26/32180DS0001_2025-26.xlsx")
 
 
 def get_erp() -> dict[str, dict]:
     """{sa2_code: {"erp": latest ERP, "erp_year": June year}} for Victorian SA2s."""
+    from ..fetch import fresh
     cache = config.DATA_RAW / "abs_erp_sa2.json"
-    if cache.exists() and cache.stat().st_size > 0:
+    if fresh(cache, 90):
         print("  cached  abs_erp_sa2.json")
         return json.loads(cache.read_text(encoding="utf-8"))
 
-    path = fetch(ERP_URL, "abs_erp_sa2.xlsx")
+    try:
+        path = fetch(ERP_NEXT_URL, "abs_erp_sa2.xlsx", max_age_days=90)
+    except Exception:
+        print("  erp: next release not published yet — using pinned 2024-25 edition")
+        path = fetch(ERP_URL, "abs_erp_sa2.xlsx", max_age_days=180)
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     out: dict[str, dict] = {}
     year = None
@@ -50,12 +59,17 @@ def get_erp() -> dict[str, dict]:
                         break
                     tbl_year = max(ycols)
                     i_erp = ycols[tbl_year]
+                    i_prev = ycols.get(tbl_year - 1)
                 prev = r
                 continue
             code = str(r[i_code] or "").strip()
             v = r[i_erp] if i_erp < len(r) else None
+            pv = r[i_prev] if i_prev is not None and i_prev < len(r) else None
             if len(code) == 9 and code.isdigit() and isinstance(v, (int, float)):
-                out[code] = {"erp": int(v), "erp_year": tbl_year}
+                rec = {"erp": int(v), "erp_year": tbl_year}
+                if isinstance(pv, (int, float)) and pv > 0:
+                    rec["erp_growth_pct"] = round((v - pv) / pv * 100, 2)
+                out[code] = rec
                 year = tbl_year
     wb.close()
     cache.write_text(json.dumps(out), encoding="utf-8")

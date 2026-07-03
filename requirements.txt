@@ -1,3 +1,5 @@
-requests>=2.31
-openpyxl>=3.1
-pyshp>=2.3
+# Pinned for reproducible builds (the cloud Refresh Data workflow installs these).
+# Pure-Python only: system Python 3.14 has no reliable geopandas/shapely wheels.
+requests==2.34.2
+openpyxl==3.1.5
+pyshp==3.1.4

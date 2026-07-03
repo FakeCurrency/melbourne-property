@@ -1,0 +1,10 @@
+name = "melb-property-ask"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# Set the secret before deploying:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+
+[vars]
+# Only this origin may call the worker (CORS). Change if you fork the site.
+ALLOWED_ORIGIN = "https://fakecurrency.github.io"

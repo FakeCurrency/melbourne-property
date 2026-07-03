@@ -69,6 +69,11 @@ def _explain_live(p: dict, family: float, transit: dict, r: dict) -> str:
     if (r.get("crime_source") == "suburb" and (r.get("person_crime") or 0) > 2500):
         safety += (" (rates are per resident — precincts with large daytime/visitor "
                    "crowds overstate day-to-day risk)")
+    tr = r.get("person_trend_pct")
+    if tr is not None and tr <= -15:
+        safety += f", and personal crime has fallen ~{abs(round(tr))}% over four years"
+    elif tr is not None and tr >= 15:
+        safety += f", and personal crime has risen ~{round(tr)}% over four years"
     dec = p["seifa"]["decile"] or 0
     seifa = ("a high socio-economic profile (SEIFA decile " + str(dec) + ")" if dec >= 8 else
              "a below-average socio-economic profile (SEIFA decile " + str(dec) + ")" if dec <= 3 else
@@ -216,6 +221,11 @@ def _tags(p: dict, family: float | None, seifa_dec: int, dev: float, market: dic
     if z and z["heritage_share"] >= 0.25: t.append("Heritage constrained")
     if z and z.get("flood_share", 0) >= 0.25: t.append("Flood overlay")
     if z and z.get("bushfire_share", 0) >= 0.25: t.append("Bushfire overlay")
+    if z and z.get("noise_share", 0) >= 0.25: t.append("Flight path")
+    if z and z.get("parks_share", 0) >= 0.22: t.append("Leafy")
+    tr = p["person_safety"].get("trend_pct")
+    if tr is not None and tr <= -15: t.append("Crime falling")
+    elif tr is not None and tr >= 25: t.append("Crime rising")
     if (market.get("yield_headline") or 0) >= 4.2: t.append("Strong yield")
     if sc("rental") >= 72: t.append("High rental demand")
     if sc("owner_occ") >= 72 and sc("rental") <= 35: t.append("Tightly held")
@@ -237,10 +247,13 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
     hazard = {}
     yield_head = {}
     yield_basis = {}
+    afford = {}     # median house price / annual household income (2021 income, caveated)
     for c in codes:
         r = records[c]
         fl, bf = r.get("flood_share"), r.get("bushfire_share")
         hazard[c] = (fl or 0) + (bf or 0) if (fl is not None or bf is not None) else None
+        inc, mh = r.get("income_weekly"), r.get("median_house")
+        afford[c] = round(mh / (inc * 52), 2) if inc and mh else None
         yh, yu = r.get("yield_house"), r.get("yield_unit")
         if r.get("yield_basis") == "unit" and yu is not None:
             yield_head[c], yield_basis[c] = yu, "unit"
@@ -281,6 +294,9 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         "upzone": _percentiles(g("growth_share")),           # upzoned share only (no UGZ)
         "unrestricted": _percentiles(g("restrict_share"), invert=True),
         "yield": _percentiles(yield_head),
+        "parks": _percentiles(g("parks_share")),
+        "pop_growth": _percentiles(g("pop_growth_pct")),
+        "afford": _percentiles(afford, invert=True),         # lower ratio = more affordable
     }
 
     # ---- pass 1: sub-scores + raw weighted composites -----------------------
@@ -304,6 +320,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "owner_occ": n["owner_occ"][c], "property_safety": n["property_safety"][c],
             "family_child": n["child"][c], "transport": transport_score,
             "schools": schools_score, "hazard_free": n["hazard_free"][c],
+            "parks": n["parks"][c],
         }
         live_raw, live_used = _weighted(live_norm, config.LIVE_WEIGHTS)
         live_family_raw, _ = _weighted(live_norm, config.LIVE_WEIGHTS_FAMILY)
@@ -321,6 +338,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         green_raw, _ = _weighted({
             "ugz": n["ugz"][c], "unrestricted": n["unrestricted"][c],
             "low_density": n["low_density"][c], "growth": n["growth"][c],
+            "pop_growth": n["pop_growth"][c],
             "detached_share": n["detached"][c], "yield": n["yield"][c],
             "infra": infra_score,
         }, config.DEV_GREENFIELD_WEIGHTS)
@@ -367,7 +385,8 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         overall = overall_val[c] if overall_val[c] is not None else 50.0
 
         pillars = {
-            "person_safety": {"score": n["person_safety"][c], "raw": r.get("person_crime")},
+            "person_safety": {"score": n["person_safety"][c], "raw": r.get("person_crime"),
+                              "trend_pct": r.get("person_trend_pct")},
             "property_safety": {"score": n["property_safety"][c], "raw": r.get("property_crime")},
             "seifa": {"score": n["seifa"][c], "raw": r.get("irsad_score"), "decile": r.get("irsad_decile")},
             "ieo": {"score": n["ieo"][c], "decile": r.get("ieo_decile")},
@@ -384,6 +403,8 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "heritage_free": {"score": n["heritage_free"][c], "raw": r.get("heritage_share")},
             "hazard_free": {"score": n["hazard_free"][c], "raw": hazard[c]},
             "yield": {"score": n["yield"][c], "raw": yield_head[c]},
+            "parks": {"score": n["parks"][c], "raw": r.get("parks_share")},
+            "afford": {"score": n["afford"][c], "raw": afford[c]},
         }
         seifa_dec = r.get("irsad_decile") or 0
         fam_label = ("Family-friendly" if (family or 0) >= 72 else
@@ -392,11 +413,18 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
             "median_house": r.get("median_house"), "median_unit": r.get("median_unit"),
             "house_12m": r.get("house_12m"), "house_3yr_cagr": r.get("house_3yr_cagr"),
             "house_year": r.get("house_year"), "unit_year": r.get("unit_year"),
+            "unit_12m": r.get("unit_12m"), "unit_3yr_cagr": r.get("unit_3yr_cagr"),
             "house_series": r.get("house_series") or [],
             "growth_score": n["growth"][c],
             "growth_signal": _growth_signal(r.get("house_3yr_cagr")),
-            "value_signal": _value_signal(n["price"][c], bool(r.get("median_house"))),
+            # value signal prefers price-to-income (real affordability) over raw price rank
+            "value_signal": (("Affordable" if n["afford"][c] >= 67 else
+                              "Premium" if n["afford"][c] <= 25 else "Mid-market")
+                             if n["afford"][c] is not None
+                             else _value_signal(n["price"][c], bool(r.get("median_house")))),
+            "income_weekly": r.get("income_weekly"), "afford_ratio": afford[c],
             "rent_weekly": r.get("rent_weekly"), "rent_12m": r.get("rent_12m"),
+            "rent_bonds": r.get("rent_bonds"),
             "rent_quarter": r.get("rent_quarter"),
             "yield_house": r.get("yield_house"), "yield_unit": r.get("yield_unit"),
             "yield_headline": yield_head[c], "yield_basis": yield_basis[c],
@@ -430,6 +458,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         zraw = ({"growth_share": r.get("growth_share") or 0, "restrict_share": r.get("restrict_share") or 0,
                  "heritage_share": r.get("heritage_share") or 0,
                  "flood_share": r.get("flood_share") or 0, "bushfire_share": r.get("bushfire_share") or 0,
+                 "noise_share": r.get("noise_share") or 0, "parks_share": r.get("parks_share") or 0,
                  "zone_mix": r.get("zone_mix") or []}
                 if r.get("zoning_raw") is not None else None)
         zoning = None
@@ -439,6 +468,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
                 "growth_share": r.get("growth_share"), "standard_share": r.get("standard_share"),
                 "restrict_share": r.get("restrict_share"), "heritage_share": r.get("heritage_share"),
                 "flood_share": r.get("flood_share"), "bushfire_share": r.get("bushfire_share"),
+                "noise_share": r.get("noise_share"), "parks_share": r.get("parks_share"),
                 "zone_mix": r.get("zone_mix") or [],
                 "label": _zoning_label(zraw),
             }
@@ -454,7 +484,7 @@ def compute_scores(records: dict[str, dict]) -> dict[str, dict]:
         out[c] = {
             "name": r.get("name"), "sa3": r.get("sa3"), "sa4": r.get("sa4"),
             "lga": r.get("lga"), "population": r.get("population"),
-            "pop_year": r.get("pop_year"),
+            "pop_year": r.get("pop_year"), "pop_growth_pct": r.get("pop_growth_pct"),
             "precinct": precinct,
             "live": live, "live_family": live_family, "dev": dev,
             "dev_green": green_s[c] if green_s[c] is not None else 50.0,

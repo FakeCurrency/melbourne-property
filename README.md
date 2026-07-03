@@ -12,11 +12,14 @@ Melbourne suburb** with two 0–100 scores plus a blended overall:
   Heritage Overlay constraint), detached-housing headroom, recent price growth, electricity-grid
   support, station access, gross rental yield, renter turnover and low current density.
 
-**Three audience modes** set smart starting weights, palettes and explanations:
-🟢 **Live** (safe/stable family base) · ⚖️ **Balanced** · 🔵 **Invest / Develop** (value-add upside).
-The weight slider stays adjustable in every mode, blending the two into the **Overall** score live in
-the browser. Compare two suburbs side-by-side, search by suburb or street address, share any view
-via URL, and toggle train-station + electricity overlays. Light/dark mode included.
+**Three audience modes** (Live / Balanced / Invest) set smart starting weights, palettes and
+explanations; the blend slider stays adjustable in every mode. On top of that: an **Ask** box that
+answers plain-English queries from the data (“$700k family home near a train”, “rent under $550/wk”,
+with stamp-duty estimates), compare **two or three** suburbs side-by-side with price-history
+sparklines, a **shortlist** (starred suburbs outlined on the map, saved locally), search by suburb /
+**postcode** / street address, fuzzy typo-tolerant matching, shareable URLs, custom score weights,
+train-station + electricity overlays, a colour-blind-safe palette, grade-trend arrows between data
+refreshes, offline support (PWA + service worker) and an iOS-style light/dark interface.
 
 > General information only — not financial or planning advice.
 
@@ -118,6 +121,22 @@ All weights live in `engine/config.py` and the **How scores are calculated** pan
 the JSON. The JSON ships per-pillar scores so the Overall blend recomputes instantly in JS when you
 move the slider — no rebuild needed.
 
+## New signals (P6)
+
+The engine also scores **affordability** (median house ÷ Census median household income),
+**population growth** (ERP year-on-year — feeds the Greenfield lens), a **4-year crime trend**
+per suburb, **parks/green-space share** (PPRZ/PCRZ) in Liveability, **airport-noise overlays**
+(MAEO/AEO — "Flight path" tag), unit price momentum, and rental-bond counts. Source URLs
+self-upgrade (CSA quarter probing, DFFH CKAN discovery, ERP next-year-first) with pinned
+fallbacks, and caches age out via `fresh()` so quarterly data refreshes itself. Engine unit
+tests live in `engine/tests/` (`python -m unittest discover -s engine/tests`).
+
+## Optional AI answers
+
+`cloudflare-worker/` contains a small Cloudflare Worker that proxies Ask questions to Claude
+(so no API key ever ships in the static site) and returns a grounded summary of the matched
+suburbs. The site is fully functional without it — see `cloudflare-worker/README.md` to enable.
+
 ## Roadmap
 
 - **P2** Property prices & growth (Victorian Valuer-General) — ✅ **done**
@@ -126,7 +145,11 @@ move the slider — no rebuild needed.
   compare mode, address search, shareable URLs — ✅ **done**
 - **P5** Flood (LSIO/SBO/FO) + bushfire (BMO) overlays, ERP 2025 populations, Greenfield/Infill
   sub-lenses, residential-weighted distances, custom weights — ✅ **done**
-- **P6** Height/design overlays (DDO), vegetation controls, land values, address-level lookup
+- **P6** Affordability/income, population growth, crime trends, parks + airport noise, Ask,
+  shortlist, 3-way compare, PWA/offline, engine tests, CI minify + monthly refresh — ✅ **done**
+- **P7** Height/design overlays (DDO), vegetation controls, land values, GTFS travel times,
+  a second city (the engine's geography layer is city-agnostic — Geelong or Sydney would be a
+  fork of `config.py` + new source adapters)
 
 ## Deploy
 
@@ -135,6 +158,17 @@ Every push to `main` publishes `public/` to **GitHub Pages** automatically
 https://fakecurrency.github.io/melbourne-property/.
 The folder is plain static files, so it can also be hosted anywhere static.
 
+The deploy minifies JS/CSS on the runner and stamps every asset + data URL with the run number,
+so browsers always pick up fresh code and data together (no manual cache-version bumps).
+
 **Data refresh:** the **Refresh Data** workflow (Actions tab → Refresh Data → Run workflow)
-rebuilds `public/data/` in the cloud from all sources and commits the result — no local
-machine needed. It also runs automatically on the 1st of each month.
+rebuilds `public/data/` in the cloud from all sources and commits the result — no local machine
+needed. It runs automatically on the 1st of each month, caches raw downloads between runs,
+snapshots the previous grades to `prev-scores.json` (the site shows ▲▼ grade-trend arrows),
+refuses to commit coverage regressions, warns on large grade drift, and files a GitHub issue
+if a run fails. A `restore_sha` input rolls `public/data` back to any previous commit.
+
+## Licence
+
+Code is **MIT** (see `LICENSE`). Source data remains © its publishers (ABS, Victorian agencies,
+Geoscience Australia) under **CC BY 4.0** — attribution is in the app's Guide → Data & sources.

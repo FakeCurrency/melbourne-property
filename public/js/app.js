@@ -1,12 +1,37 @@
 /* Melbourne Property — map, audience modes, one-click presets, scorecards. */
 (async function () {
+  // These two run before data loads (they used to be inline, moved here for CSP).
+  if (window.innerWidth < 900) document.getElementById("dock").classList.add("collapsed");
+  document.getElementById("dockTog").addEventListener("click",
+    () => document.getElementById("dock").classList.toggle("collapsed"));
+
   // Versioned data URLs: keeps code + data cache-coherent on GitHub Pages
-  // (bump together with the ?v= asset versions in index.html).
-  const DATA_V = "17";
-  const [geo, data] = await Promise.all([
-    fetch("data/melbourne.geojson?v=" + DATA_V).then(r => r.json()),
-    fetch("data/scores.json?v=" + DATA_V).then(r => r.json()),
-  ]);
+  // (bump together with the ?v= asset versions in index.html; the deploy
+  // workflow overwrites both with the run number).
+  const DATA_V = "20";
+  const boot = document.getElementById("boot");
+  const fetchJson = url => fetch(url).then(r => {
+    if (!r.ok) throw new Error(url.split("?")[0] + " → HTTP " + r.status);
+    return r.json();
+  });
+  let geo, data;
+  try {
+    [geo, data] = await Promise.all([
+      fetchJson("data/melbourne.geojson?v=" + DATA_V),
+      fetchJson("data/scores.json?v=" + DATA_V),
+    ]);
+  } catch (err) {
+    boot.innerHTML = `<div class="boot-inner">
+      <div class="boot-t">Couldn't load the suburb data</div>
+      <div class="boot-s">${(err && err.message) || err}<br>Check your connection and try again.</div>
+      <button class="btn boot-retry" id="bootRetry">Retry</button></div>`;
+    document.getElementById("bootRetry").addEventListener("click", () => location.reload());
+    return;
+  }
+  // Previous refresh's grades (for trend arrows) — optional, never blocks boot.
+  let PREV = null;
+  fetchJson("data/prev-scores.json?v=" + DATA_V)
+    .then(p => { PREV = p; if (selected) renderCard(selected); }).catch(() => {});
   const A = data.areas;
   const MODE_PRESETS = data.mode_presets || { live: 0.85, balanced: 0.5, invest: 0.2 };
   const PRESETS = data.presets || [];
@@ -20,6 +45,9 @@
   let activeBest = null;          // "live" | "invest" | "develop" | null
   let selected = null;
   let askSet = null;              // Set of sa2 codes matched by the Ask feature
+  // shortlist must exist before the map layer is built — style() reads it
+  let shortlist = new Set(JSON.parse(localStorage.getItem("shortlist") || "[]"));
+  const saveShortlist = () => localStorage.setItem("shortlist", JSON.stringify([...shortlist]));
 
   // Colour-by options (one-tap toggles): composites, sub-lenses + raw layers.
   const COLORBY = [
@@ -45,17 +73,30 @@
     live: [[0, [203, 124, 120]], [45, [214, 208, 150]], [70, [120, 194, 120]], [100, [19, 122, 62]]],
     invest: [[0, [44, 74, 110]], [45, [110, 140, 180]], [72, [217, 164, 65]], [100, [242, 196, 0]]],
   };
+  // Colour-blind-safe alternative (viridis-like): monotonic lightness, no
+  // red/green axis. One ramp replaces all three when the toggle is on.
+  const CB_RAMP = [[0, [68, 1, 84]], [30, [59, 82, 139]], [55, [33, 145, 140]], [78, [94, 201, 98]], [100, [253, 231, 37]]];
+  let cbPalette = localStorage.getItem("cbPalette") === "1";
   function rampColor(score, ramp) {
-    const stops = RAMPS[ramp]; score = Math.max(0, Math.min(100, score));
+    const stops = cbPalette ? CB_RAMP : RAMPS[ramp]; score = Math.max(0, Math.min(100, score));
     let a = stops[0], b = stops[stops.length - 1];
     for (let i = 0; i < stops.length - 1; i++) if (score >= stops[i][0] && score <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; }
     const t = b[0] === a[0] ? 0 : (score - a[0]) / (b[0] - a[0]);
     const c = j => Math.round(a[1][j] + t * (b[1][j] - a[1][j]));
     return `rgb(${c(0)},${c(1)},${c(2)})`;
   }
-  const cssGradient = ramp => "linear-gradient(90deg," + RAMPS[ramp].map(s => `${rampColor(s[0], ramp)} ${s[0]}%`).join(",") + ")";
+  const cssGradient = ramp => "linear-gradient(90deg," + (cbPalette ? CB_RAMP : RAMPS[ramp]).map(s => `${rampColor(s[0], ramp)} ${s[0]}%`).join(",") + ")";
   const col = s => rampColor(s, MODE_RAMP[mode]);
   const pct = x => x == null ? "—" : Math.round(x * 100) + "%";
+
+  // ---- inline toast (replaces alert(): non-blocking, auto-dismisses) -----
+  let toastTimer = 0;
+  function toast(msg) {
+    let el = document.getElementById("toast");
+    if (!el) { el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }
+    el.textContent = msg; el.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 4200);
+  }
 
   // ---- score accessors (mode-aware Liveability, custom-weight aware) -----
   Object.entries(A).forEach(([c, a]) => a._c = c);   // stamp codes for custom-score maps
@@ -91,16 +132,23 @@
     `https://{s}.basemaps.cartocdn.com/${dark ? "dark_nolabels" : "light_nolabels"}/{z}/{x}/{y}{r}.png`,
     { subdomains: "abcd", maxZoom: 19, attribution: '&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Data: ABS, CSA Vic' });
   let base = tilesFor(document.documentElement.dataset.theme === "dark").addTo(map);
-  const labels = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
+  const labelsFor = dark => L.tileLayer(
+    `https://{s}.basemaps.cartocdn.com/${dark ? "dark_only_labels" : "light_only_labels"}/{z}/{x}/{y}{r}.png`,
     { subdomains: "abcd", pane: "markerPane", opacity: .85 });
+  let labels = labelsFor(document.documentElement.dataset.theme === "dark");
 
   const style = f => {
-    const a = A[f.properties.sa2_code]; if (!a) return { fillColor: "#bbb", fillOpacity: .25, weight: .6, color: "rgba(255,255,255,.5)" };
-    const v = metricOf(a), sel = f.properties.sa2_code === selected;
-    if (v == null) return { weight: sel ? 2.4 : .6, color: sel ? "#0a84ff" : "rgba(255,255,255,.5)", fillColor: "#9a9aa0", fillOpacity: .18 };
+    const code = f.properties.sa2_code;
+    const a = A[code]; if (!a) return { fillColor: "#bbb", fillOpacity: .25, weight: .6, color: "rgba(255,255,255,.5)" };
+    const v = metricOf(a), sel = code === selected, star = shortlist.has(code);
+    // shortlisted suburbs wear a dashed gold outline so they stay findable
+    const edge = sel ? { weight: 2.4, color: "#0a84ff" }
+      : star ? { weight: 1.8, color: "#ffd60a", dashArray: "4 3" }
+      : { weight: .6, color: "rgba(255,255,255,.5)" };
+    if (v == null) return { ...edge, fillColor: "#9a9aa0", fillOpacity: .18 };
     // Ask results: matched suburbs paint, everything else fades right back
-    const dim = askSet ? !askSet.has(f.properties.sa2_code) : v < minScore;
-    return { weight: sel ? 2.4 : .6, color: sel ? "#0a84ff" : "rgba(255,255,255,.5)", fillColor: col(v), fillOpacity: (sel || !dim) ? .8 : .07 };
+    const dim = askSet ? !askSet.has(code) : v < minScore;
+    return { ...edge, fillColor: col(v), fillOpacity: (sel || !dim) ? .8 : .07 };
   };
   const layer = L.geoJSON(geo, {
     style,
@@ -123,6 +171,22 @@
     hc.classList.remove("hidden");
   }
   const hideHover = () => hc.classList.add("hidden");
+
+  // ---- shortlist (starred suburbs, persisted locally) ---------------------
+  function toggleStar(code) {
+    shortlist.has(code) ? shortlist.delete(code) : shortlist.add(code);
+    saveShortlist(); repaint(); updateLists();
+    if (selected === code) renderCard(code);
+  }
+
+  // grade movement since the previous data refresh (needs prev-scores.json)
+  const GRADE_ORD = { "A+": 5, "A": 4, "B": 3, "C": 2, "D": 1 };
+  function gradeTrend(code, g) {
+    const was = PREV && PREV.grades && PREV.grades[code];
+    if (!was || was === g) return "";
+    const up = GRADE_ORD[g] > GRADE_ORD[was];
+    return `<span class="gtrend ${up ? "gup" : "gdown"}" title="Was ${was} at the previous data refresh (${PREV.generated || "earlier"})">${up ? "▲" : "▼"}</span>`;
+  }
 
   // ---- scorecard --------------------------------------------------------
   const gradeColor = g => ({ "A+": "#248a3d", "A": "#34c759", "B": "#ffcc00", "C": "#ff9500", "D": "#ff3b30" }[g] || "#8e8e93");
@@ -221,9 +285,10 @@
         <div class="growth" style="color:${up ? "var(--good)" : "var(--bad)"}">${up ? IC.up : IC.down} ${m.house_12m ?? "–"}% <small>12m</small></div>
       </div>
       <div class="market-sub">
-        ${m.median_unit ? `Unit ${money(m.median_unit)} · ` : ""}3-yr ${m.house_3yr_cagr ?? "–"}%/yr
+        ${m.median_unit ? `Unit ${money(m.median_unit)}${m.unit_12m != null ? ` (${m.unit_12m >= 0 ? "+" : ""}${m.unit_12m}% 12m)` : ""} · ` : ""}3-yr ${m.house_3yr_cagr ?? "–"}%/yr
         ${sig(m.growth_signal + " growth", m.growth_signal.toLowerCase())}${m.value_signal ? sig(m.value_signal, "val") : ""}${m.yield_signal ? sig(m.yield_signal, m.yield_house >= 4.2 ? "strong" : m.yield_house >= 3.2 ? "moderate" : "soft") : ""}
       </div>
+      ${m.afford_ratio ? `<div class="market-sub" title="Median house price ÷ median annual household income for this suburb (ABS Census 2021 income, indexed). Greater Melbourne median is around ${data.afford_median || 10}×.">Affordability ≈ <b>${m.afford_ratio}×</b> local household income${m.income_weekly ? ` · income ~$${Math.round(m.income_weekly).toLocaleString()}/wk` : ""}</div>` : ""}
       ${rentLine ? `<div class="market-sub">${rentLine}</div>` : ""}
       ${prominent ? `<p class="market-note">${a.explanation_invest}</p>` : ""}</div>`;
   }
@@ -301,7 +366,11 @@
 
   function renderCard(code) {
     const a = A[code]; if (!a) return;
-    if (compareWith && compareWith !== code) return renderCompare(code, compareWith);
+    if (compareWith) {
+      const others = compareWith.filter(c => c !== code);
+      if (others.length) return renderCompare(code, others);
+      compareWith = null;                  // compared against itself — drop out
+    }
     const p = a.pillars, m = a.market, lv = liveOf(a), ov = overallOf(a);
     const prominent = mode !== "live";          // price leads in Balanced/Invest, light in Live
     const chips = [`<span class="chip fam">${IC.fam} ${a.family.label} ${a.family.score}</span>`]
@@ -311,8 +380,14 @@
     sc.innerHTML = `
       <div class="sc-head">
         <div><h2 class="sc-name">${a.name}</h2>
-          <p class="sc-sub">${a.sa3 || ""} · ${a.lga || ""}${a.population ? " · pop " + a.population.toLocaleString() + (a.pop_year ? " (" + a.pop_year + ")" : "") : ""}</p></div>
-        <span class="grade" title="Relative tier of the Overall score at the default blend: A+ = top ~10% of Greater Melbourne" style="${gradeStyle(a.grade)}">${a.grade}</span>
+          <p class="sc-sub">${a.sa3 || ""} · ${a.lga || ""}${a.population ? " · pop " + a.population.toLocaleString() +
+            (a.pop_growth_pct != null ? ` <span class="popg" title="Estimated resident population change over the last year (ABS ERP)">${a.pop_growth_pct >= 0 ? "+" : ""}${a.pop_growth_pct}%/yr</span>` : "") : ""}</p></div>
+        <div class="sc-badges">
+          <button class="star-btn${shortlist.has(code) ? " on" : ""}" id="starBtn"
+            title="${shortlist.has(code) ? "Remove from" : "Add to"} your shortlist (saved on this device; outlined in gold on the map)"
+            aria-label="Toggle shortlist">${shortlist.has(code) ? "★" : "☆"}</button>
+          <span class="grade" title="Relative tier of the Overall score at the default blend: A+ = top ~10% of Greater Melbourne" style="${gradeStyle(a.grade)}">${a.grade}${gradeTrend(code, a.grade)}</span>
+        </div>
       </div>
       <div class="chips">${chips}</div>
       <p class="bestfor"><b>Best for:</b> ${bestFor(a)}.
@@ -355,55 +430,68 @@
     if (cb) cb.onclick = () => { comparePicking = true; renderCard(code); };
     const cc = document.getElementById("cmpCancel");
     if (cc) cc.onclick = () => { comparePicking = false; renderCard(code); };
+    const sb = document.getElementById("starBtn");
+    if (sb) sb.onclick = () => toggleStar(code);
     sc.classList.remove("pop"); void sc.offsetWidth; sc.classList.add("pop");  // re-trigger fade-in
   }
 
-  // ---- compare mode -------------------------------------------------------
-  let compareWith = null, comparePicking = false;
-  function renderCompare(codeA, codeB) {
-    const a = A[codeA], b = A[codeB]; if (!a || !b) return;
-    const num = (x, y, lowerBetter) => {
-      if (x == null || y == null || x === y) return ["", ""];
-      const aWins = lowerBetter ? x < y : x > y;
-      return aWins ? ["win", ""] : ["", "win"];
+  // ---- compare mode (2- or 3-way) ------------------------------------------
+  let compareWith = null;          // array of 1-2 other SA2 codes, or null
+  let comparePicking = false;      // next map/list tap becomes a comparison column
+  function renderCompare(codeA, others) {
+    const cols = [codeA, ...others].map(c => A[c]).filter(Boolean);
+    if (cols.length < 2) return;
+    const three = cols.length === 3;
+    // winner class per column: best numeric value wins (lowerBetter flips it)
+    const win = (vals, lowerBetter) => {
+      const nums = vals.map(v => (v == null ? null : +v));
+      const ok = nums.filter(v => v != null);
+      if (ok.length < 2) return vals.map(() => "");
+      const best = lowerBetter ? Math.min(...ok) : Math.max(...ok);
+      if (ok.every(v => v === best)) return vals.map(() => "");
+      return nums.map(v => (v === best ? "win" : ""));
     };
-    const row = (label, va, vb, cls = ["", ""], tip = "") =>
-      `<div class="cmp-row" title="${tip}"><span class="cmp-l">${label}</span>
-        <span class="cmp-v ${cls[0]}">${va ?? "—"}</span><span class="cmp-v ${cls[1]}">${vb ?? "—"}</span></div>`;
-    const lvA = liveOf(a), lvB = liveOf(b), ovA = overallOf(a), ovB = overallOf(b);
-    const kmA = a.transit.nearest_station_km, kmB = b.transit.nearest_station_km;
+    const row = (label, vals, cls, tip = "") =>
+      `<div class="cmp-row${three ? " c3" : ""}" title="${tip}"><span class="cmp-l">${label}</span>` +
+      vals.map((v, i) => `<span class="cmp-v ${(cls || [])[i] || ""}">${v ?? "—"}</span>`).join("") + `</div>`;
+    const nrow = (label, raw, fmt, lowerBetter, tip) =>
+      row(label, raw.map(v => (v == null ? null : fmt(v))), win(raw, lowerBetter), tip);
+    const lv = cols.map(liveOf), dv = cols.map(devOf), ov = cols.map(overallOf);
     sc.classList.remove("empty");
     sc.innerHTML = `
       <div class="sc-head cmp-head">
         <div><h2 class="sc-name">Compare</h2>
-          <p class="sc-sub">${a.name} vs ${b.name}</p></div>
+          <p class="sc-sub">${cols.map(c => c.name).join(" vs ")}</p></div>
         <button class="cmp-x big" id="cmpExit" title="Exit compare">×</button>
       </div>
-      <div class="cmp-row cmp-titles"><span class="cmp-l"></span>
-        <span class="cmp-v"><b>${a.name}</b><span class="grade gmini" style="${gradeStyle(a.grade)}">${a.grade}</span></span>
-        <span class="cmp-v"><b>${b.name}</b><span class="grade gmini" style="${gradeStyle(b.grade)}">${b.grade}</span></span></div>
-      ${row("Liveability", lvA, lvB, num(lvA, lvB))}
-      ${row("Development", devOf(a), devOf(b), num(devOf(a), devOf(b)))}
-      ${row("Greenfield / Infill", `${a.dev_green} / ${a.dev_infill}`, `${b.dev_green} / ${b.dev_infill}`)}
-      ${row("Overall (your blend)", ovA, ovB, num(ovA, ovB))}
-      ${row("Family suitability", a.family.score, b.family.score, num(a.family.score, b.family.score))}
-      ${row("Personal safety", a.pillars.person_safety.score, b.pillars.person_safety.score,
-            num(a.pillars.person_safety.score, b.pillars.person_safety.score), "percentile — higher = safer")}
-      ${row("SEIFA decile", a.pillars.seifa.decile, b.pillars.seifa.decile, num(a.pillars.seifa.decile, b.pillars.seifa.decile))}
-      ${row("Median house", money(a.market.median_house), money(b.market.median_house))}
-      ${row("Rent / week", a.market.rent_weekly ? "$" + Math.round(a.market.rent_weekly) : null,
-            b.market.rent_weekly ? "$" + Math.round(b.market.rent_weekly) : null)}
-      ${row("Gross yield", a.market.yield_house ? a.market.yield_house + "%" : null,
-            b.market.yield_house ? b.market.yield_house + "%" : null,
-            num(a.market.yield_house, b.market.yield_house))}
-      ${row("3-yr growth", a.market.house_3yr_cagr != null ? a.market.house_3yr_cagr + "%/yr" : null,
-            b.market.house_3yr_cagr != null ? b.market.house_3yr_cagr + "%/yr" : null,
-            num(a.market.house_3yr_cagr, b.market.house_3yr_cagr))}
-      ${row("Nearest station", kmA != null ? kmA + " km" : null, kmB != null ? kmB + " km" : null, num(kmA, kmB, true))}
-      ${row("Zoning", a.zoning ? a.zoning.label : null, b.zoning ? b.zoning.label : null)}
-      ${row("Grid support", a.infra.advantage, b.infra.advantage)}
-      <p class="covnote">Green = the stronger side. Tap × to go back to the full scorecard.</p>`;
-    document.getElementById("cmpExit").onclick = () => { compareWith = null; renderCard(selected); writeHash(); };
+      <div class="cmp-row cmp-titles${three ? " c3" : ""}"><span class="cmp-l"></span>
+        ${cols.map(c => `<span class="cmp-v"><b>${c.name}</b><span class="grade gmini" style="${gradeStyle(c.grade)}">${c.grade}</span></span>`).join("")}</div>
+      <div class="cmp-row${three ? " c3" : ""}"><span class="cmp-l">Price history</span>
+        ${cols.map(c => `<span class="cmp-v">${spark(c.market.house_series) || "—"}</span>`).join("")}</div>
+      ${nrow("Liveability", lv, v => v)}
+      ${nrow("Development", dv, v => v)}
+      ${row("Greenfield / Infill", cols.map(c => `${c.dev_green} / ${c.dev_infill}`))}
+      ${nrow("Overall (your blend)", ov, v => v)}
+      ${nrow("Family suitability", cols.map(c => c.family.score), v => v)}
+      ${nrow("Personal safety", cols.map(c => c.pillars.person_safety.score), v => v, false, "percentile — higher = safer")}
+      ${nrow("SEIFA decile", cols.map(c => c.pillars.seifa.decile), v => v)}
+      ${nrow("Median house", cols.map(c => c.market.median_house), money)}
+      ${nrow("Rent / week", cols.map(c => c.market.rent_weekly), v => "$" + Math.round(v))}
+      ${nrow("Gross yield", cols.map(c => c.market.yield_house), v => v + "%")}
+      ${nrow("3-yr growth", cols.map(c => c.market.house_3yr_cagr), v => v + "%/yr")}
+      ${nrow("Affordability", cols.map(c => c.market.afford_ratio), v => v + "× income", true, "median house ÷ median household income — lower is more affordable")}
+      ${nrow("Nearest station", cols.map(c => c.transit.nearest_station_km), v => v + " km", true)}
+      ${row("Zoning", cols.map(c => (c.zoning ? c.zoning.label : null)))}
+      ${row("Grid support", cols.map(c => c.infra.advantage))}
+      ${!three ? `<button class="cmp-btn cmp-add" id="cmpAdd" title="Add a third column">+ Add a third suburb</button>` : ""}
+      ${comparePicking ? `<p class="cmp-hint">Now tap another suburb on the map, list or search…
+        <button class="cmp-x" id="cmpCancel2">cancel</button></p>` : ""}
+      <p class="covnote">Green = the strongest column. Tap × to go back to the full scorecard.</p>`;
+    document.getElementById("cmpExit").onclick = () => { compareWith = null; comparePicking = false; renderCard(selected); writeHash(); };
+    const ca = document.getElementById("cmpAdd");
+    if (ca) ca.onclick = () => { comparePicking = true; renderCompare(codeA, others); };
+    const cc2 = document.getElementById("cmpCancel2");
+    if (cc2) cc2.onclick = () => { comparePicking = false; renderCompare(codeA, others); };
     sc.classList.remove("pop"); void sc.offsetWidth; sc.classList.add("pop");
   }
 
@@ -423,7 +511,9 @@
   function select(code, fly) {
     infopanel.classList.remove("peek");       // picking a suburb re-opens a pushed-down sheet
     if (comparePicking && selected && code !== selected) {
-      comparePicking = false; compareWith = code;
+      comparePicking = false;
+      compareWith = [...(compareWith || []), code]
+        .filter((c, i, arr) => c !== selected && arr.indexOf(c) === i).slice(0, 2);
       repaint(); renderCompare(selected, compareWith); writeHash();
       return;
     }
@@ -434,8 +524,8 @@
       minScore = 0; activeBest = null; setMinSlider(); highlightBest();
     }
     selected = code; repaint();
-    if (compareWith && compareWith !== code) renderCompare(code, compareWith);
-    else renderCard(code);
+    renderCard(code);                       // delegates to compare view if active
+    document.title = A[code] ? `${A[code].name} — Melbourne Property` : "Melbourne Property";
     writeHash();
     if (fly && byCode[code]) map.fitBounds(byCode[code].getBounds(), { maxZoom: 13, padding: [40, 40] });
   }
@@ -605,10 +695,21 @@
     document.getElementById("listLabel").textContent = LABELS[colorBy];
     const top = entries.slice().sort((x, y) => metricRank(y[1]) - metricRank(x[1])).slice(0, 12);
     const list = document.getElementById("topList");
-    list.innerHTML = top.map(([code, a], i) =>
-      `<li data-code="${code}"><span class="rk">${i + 1}</span><span class="nm">${a.name}</span>
-        <span class="sv" style="color:${col(metricOf(a))}">${metricOf(a)}</span></li>`).join("");
-    list.querySelectorAll("li").forEach(li => li.onclick = () => select(li.dataset.code, true));
+    const starRows = [...shortlist].filter(c => A[c]).map(c =>
+      `<li class="sl" data-code="${c}" tabindex="0"><span class="rk sl-star">★</span><span class="nm">${A[c].name}</span>
+        <span class="sv" style="color:${col(metricOf(A[c]) ?? 50)}">${metricOf(A[c]) ?? "—"}</span></li>`).join("");
+    list.innerHTML =
+      (starRows ? `<li class="sl-h" aria-hidden="true">Your shortlist</li>${starRows}
+        <li class="sl-h" aria-hidden="true">Top by ${LABELS[colorBy]}</li>` : "") +
+      top.map(([code, a], i) =>
+        `<li data-code="${code}" tabindex="0"><span class="rk">${i + 1}</span><span class="nm">${a.name}</span>
+          <span class="sv" style="color:${col(metricOf(a))}">${metricOf(a)}</span></li>`).join("");
+    list.querySelectorAll("li[data-code]").forEach(li => {
+      li.onclick = () => select(li.dataset.code, true);
+      li.onkeydown = e => {                 // keyboard: Enter/Space selects
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(li.dataset.code, true); }
+      };
+    });
   }
 
   // ---- footer build line ------------------------------------------------
@@ -620,7 +721,7 @@
     if (!hashReady) return;
     const p = new URLSearchParams();
     if (selected) p.set("s", selected);
-    if (compareWith) p.set("vs", compareWith);
+    if (compareWith && compareWith.length) p.set("vs", compareWith.join("~"));
     p.set("m", mode); p.set("w", Math.round(wLive * 100));
     if (colorBy !== "overall") p.set("c", colorBy);
     if (minScore > 0) p.set("min", Math.round(minScore));
@@ -641,7 +742,10 @@
     if (p.get("w") != null && !isNaN(+p.get("w"))) wLive = Math.max(0, Math.min(100, +p.get("w"))) / 100;
     if (p.get("c") && COLORBY.some(([k]) => k === p.get("c"))) colorBy = p.get("c");
     if (p.get("min") != null) minScore = Math.max(0, Math.min(90, +p.get("min") || 0));
-    if (p.get("vs") && A[p.get("vs")]) compareWith = p.get("vs");
+    if (p.get("vs")) {
+      const vs = p.get("vs").split("~").filter(c => A[c]).slice(0, 2);
+      compareWith = vs.length ? vs : null;
+    }
     if (p.get("lw") && p.get("dw")) {           // restore shared custom weights
       const parse = (kind, str) => {
         const vals = str.split(".").map(v => Math.max(0, Math.min(50, +v || 0)));
@@ -774,15 +878,15 @@
       const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=au" +
         "&viewbox=144.2,-37.1,145.9,-38.7&bounded=1&q=" + encodeURIComponent(q);
       const res = await fetch(url, { headers: { "Accept-Language": "en" } }).then(r => r.json());
-      if (!res.length) { alert("Couldn't find that address inside Greater Melbourne."); return; }
+      if (!res.length) { toast("Couldn't find that address inside Greater Melbourne."); return; }
       const lat = +res[0].lat, lon = +res[0].lon;
       const code = sa2At(lon, lat);
-      if (!code) { alert("That point is outside the Greater Melbourne study area."); return; }
+      if (!code) { toast("That point is outside the Greater Melbourne study area."); return; }
       if (addrMarker) map.removeLayer(addrMarker);
       addrMarker = L.marker([lat, lon], { title: res[0].display_name }).addTo(map)
         .bindPopup(res[0].display_name.split(",").slice(0, 3).join(",")).openPopup();
       select(code, true);
-    } catch (e) { alert("Address lookup failed — try again in a moment."); }
+    } catch (e) { toast("Address lookup failed — try again in a moment."); }
   }
 
   // ---- search (suburbs + addresses) ---------------------------------------
@@ -816,9 +920,22 @@
       }
       return;
     }
-    entries.filter(([, a]) => a.name.toLowerCase().includes(q)).slice(0, 8).forEach(([code, a]) => {
+    let matches = entries.filter(([, a]) => a.name.toLowerCase().includes(q));
+    let fuzzy = false;
+    if (!matches.length && q.length >= 4) {    // typo tolerance: edit distance ≤ 2
+      matches = entries
+        .map(([code, a]) => {
+          const name = a.name.toLowerCase();
+          const d = Math.min(...name.split(/[\s\-–]+/).concat(name).map(t => editDist(q, t, 2)));
+          return [code, a, d];
+        })
+        .filter(([, , d]) => d <= 2)
+        .sort((x, y) => x[2] - y[2]);
+      fuzzy = matches.length > 0;
+    }
+    matches.slice(0, 8).forEach(([code, a]) => {
       const d = document.createElement("div"); d.className = "res";
-      d.innerHTML = `<span>${a.name}</span><small>${a.lga || ""}</small>`;
+      d.innerHTML = `<span>${a.name}</span><small>${fuzzy ? "did you mean?" : (a.lga || "")}</small>`;
       d.onclick = () => { select(code, true); search.value = a.name; closeSearch(); };
       results.appendChild(d);
     });
@@ -829,8 +946,34 @@
       results.appendChild(d);
     }
   }
+  // bounded Levenshtein: bails out early once the distance can't beat `max`
+  function editDist(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i]; let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        best = Math.min(best, cur[j]);
+      }
+      if (best > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  }
   search.oninput = runSearch;
-  search.onkeydown = e => { if (e.key === "Enter") { const f = results.querySelector(".res"); if (f) f.click(); } };
+  search.onkeydown = e => {                    // ↑/↓ move through results, Enter selects
+    const rows = [...results.querySelectorAll(".res")];
+    if (!rows.length) return;
+    const cur = rows.findIndex(r => r.classList.contains("active"));
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = e.key === "ArrowDown" ? Math.min(cur + 1, rows.length - 1) : Math.max(cur - 1, 0);
+      rows.forEach((r, i) => r.classList.toggle("active", i === next));
+    } else if (e.key === "Enter") {
+      (rows[cur] || rows[0]).click();
+    }
+  };
   // mobile: the topbar magnifier expands the search into a full-width bar
   document.getElementById("searchTog").onclick = () => {
     if (topbar.classList.toggle("search-open")) { search.value = ""; results.innerHTML = ""; search.focus(); }
@@ -846,6 +989,12 @@
   const askResults = document.getElementById("askResults");
   const askSummary = document.getElementById("askSummary");
 
+  // Optional Claude-powered summaries. Deploy cloudflare-worker/ (see its
+  // README), paste the worker URL here, and add that origin to the CSP
+  // connect-src in index.html. Empty string = feature hidden, site fully
+  // client-side.
+  const AI_ENDPOINT = "";
+
   function parseAsk(q) {
     const s = " " + q.toLowerCase() + " ";
     let budget = null, m;
@@ -854,13 +1003,18 @@
     else if ((m = s.match(/\$?\s*(\d{1,3}(?:[, ]\d{3})+|\d{6,})\b/))) budget = parseFloat(m[1].replace(/[, ]/g, ""));
     else if ((m = s.match(/\$\s*(\d+(?:\.\d+)?)/))) { const n = parseFloat(m[1]); budget = n <= 20 ? n * 1e6 : n * 1e3; }
     else if ((m = s.match(/\b(\d{3,4})\b/))) { const n = +m[1]; if (n >= 200 && n <= 5000) budget = n * 1e3; }
+    // weekly rent budget: "$600/wk", "rent under 550 a week"
+    let rentMax = null;
+    if ((m = s.match(/\$?\s*(\d{2,4})\s*(?:\/\s*|per\s+|a\s+)(?:week|wk|w\b)/))) rentMax = +m[1];
+    if (rentMax && budget === rentMax * 1e3) budget = null;   // same digits, was a rent figure
     let goal = "live";
     if (/famil|kids|children|school/.test(s)) goal = "family";
     if (/invest|growth|buy and hold|portfolio|capital/.test(s)) goal = "invest";
     if (/develop|subdivi|build|knock|redevelop|land bank/.test(s)) goal = "develop";
     if (/yield|rental income|cash ?flow|rent (it |them )?out|positivel?y gear/.test(s)) goal = "yield";
+    if (goal === "live" && (rentMax || /\brent(ing|er)?\b/.test(s))) goal = "rent";
     return {
-      budget, goal,
+      budget, rentMax, goal,
       unit: /unit|apartment|\bflat\b|condo|townhouse/.test(s),
       safe: /\bsafe|safety|low crime/.test(s),
       train: /train|station|commut/.test(s),
@@ -868,13 +1022,30 @@
     };
   }
 
+  // liveOf/devOf so Ask respects custom weights when the user has set them
   const ASK_GOAL = {
-    live:    { label: "to live",          colorBy: "live",   score: a => a.live },
-    family:  { label: "for a family",     colorBy: "family", score: a => a.live_family },
-    invest:  { label: "to invest",        colorBy: "dev",    score: a => 0.45 * a.dev + 0.3 * (a.market.growth_score ?? 50) + 0.25 * (a.pillars.yield.score ?? 50) },
-    develop: { label: "to develop",       colorBy: "dev",    score: a => a.dev },
-    yield:   { label: "for rental yield", colorBy: "yield",  score: a => a.pillars.yield.score ?? 0 },
+    live:    { label: "to live",          colorBy: "live",   score: a => liveOf(a),
+               how: "ranked by Liveability — safety, socio-economics, trains, schools" },
+    rent:    { label: "to rent",          colorBy: "live",   score: a => liveOf(a),
+               how: "ranked by Liveability among suburbs inside your weekly rent" },
+    family:  { label: "for a family",     colorBy: "family", score: a => a.live_family,
+               how: "ranked by family-lens Liveability — safety, schools, children" },
+    invest:  { label: "to invest",        colorBy: "dev",    score: a => 0.45 * devOf(a) + 0.3 * (a.market.growth_score ?? 50) + 0.25 * (a.pillars.yield.score ?? 50),
+               how: "ranked 45% Development + 30% recent growth + 25% yield" },
+    develop: { label: "to develop",       colorBy: "dev",    score: a => devOf(a),
+               how: "ranked by Development potential — zoning, headroom, grid" },
+    yield:   { label: "for rental yield", colorBy: "yield",  score: a => a.pillars.yield.score ?? 0,
+               how: "ranked by gross rental yield" },
   };
+
+  // Victorian general-rate stamp duty (owner-occupier/investor, no concessions)
+  function vicStampDuty(v) {
+    if (v <= 25000) return v * 0.014;
+    if (v <= 130000) return 350 + (v - 25000) * 0.024;
+    if (v <= 960000) return 2870 + (v - 130000) * 0.06;
+    if (v <= 2000000) return v * 0.055;
+    return 110000 + (v - 2000000) * 0.065;
+  }
 
   function runAsk() {
     const q = askInput.value.trim();
@@ -885,6 +1056,7 @@
       if (a.precinct) continue;
       const price = p.unit ? a.market.median_unit : a.market.median_house;
       if (p.budget && (!price || price > p.budget * 1.05)) continue;
+      if (p.rentMax && (!a.market.rent_weekly || a.market.rent_weekly > p.rentMax * 1.05)) continue;
       if (p.safe && (a.pillars.person_safety.score ?? 0) < 65) continue;
       if (p.train && (a.transit.nearest_station_km ?? 99) > 1.6) continue;
       if (p.region && !(a.sa4 || "").toLowerCase().includes(p.region)) continue;
@@ -895,6 +1067,7 @@
 
     const parts = [];
     if (p.budget) parts.push(money(p.budget) + (p.unit ? " (units)" : ""));
+    if (p.rentMax) parts.push("$" + p.rentMax + "/wk rent");
     parts.push(g.label);
     if (p.safe) parts.push("safe"); if (p.train) parts.push("near a train"); if (p.region) parts.push(p.region);
     if (!top.length) {
@@ -903,7 +1076,11 @@
       askSet = null; refresh();
       return;
     }
-    askSummary.innerHTML = `<b>${rows.length}</b> suburbs fit <b>${parts.join(" · ")}</b> — top ${top.length} below, highlighted on the map.`;
+    const duty = p.budget && !p.rentMax
+      ? ` Stamp duty on a ${money(p.budget)} buy ≈ <b>$${Math.round(vicStampDuty(p.budget)).toLocaleString()}</b> (Vic general rate — concessions may apply).`
+      : "";
+    askSummary.innerHTML = `<b>${rows.length}</b> suburbs fit <b>${parts.join(" · ")}</b> — top ${top.length} below, highlighted on the map.
+      <span class="ask-how">${g.how}${customW && (p.goal === "live" || p.goal === "rent" || p.goal === "develop") ? " (your custom weights)" : ""}.${duty}</span>`;
     askResults.innerHTML = top.map(([code, a, sc, price], i) => `
       <div class="ask-row" data-code="${code}">
         <span class="rk">${i + 1}</span>
@@ -912,6 +1089,32 @@
       </div>`).join("");
     askResults.querySelectorAll(".ask-row").forEach(r =>
       r.onclick = () => { closeAsk(); select(r.dataset.code, true); });
+
+    if (AI_ENDPOINT) {                       // optional grounded AI summary
+      const btn = document.createElement("button");
+      btn.className = "btn ghost ai-btn"; btn.textContent = "AI summary of these matches";
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = "Thinking…";
+        try {
+          const digest = top.map(([, a, s, price]) => ({
+            name: a.name, lga: a.lga, grade: a.grade, score: s, median: price,
+            rent_wk: a.market.rent_weekly, yield_pct: a.market.yield_headline,
+            safety: a.pillars.person_safety.score, station_km: a.transit.nearest_station_km,
+          }));
+          const res = await fetch(AI_ENDPOINT, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: q, context: digest }),
+          }).then(r => r.json());
+          const out = document.createElement("p");
+          out.className = "ai-answer"; out.textContent = res.answer || res.error || "No answer.";
+          askResults.prepend(out); btn.remove();
+        } catch {
+          btn.disabled = false; btn.textContent = "AI summary of these matches";
+          toast("AI request failed — try again in a moment.");
+        }
+      };
+      askResults.prepend(btn);
+    }
 
     askSet = new Set(top.map(r => r[0]));
     activeBest = null; activePreset = null; minScore = 0; setMinSlider();
@@ -977,7 +1180,14 @@
   function setTheme(t) {
     document.documentElement.dataset.theme = t; localStorage.setItem("theme", t);
     map.removeLayer(base); base = tilesFor(t === "dark").addTo(map); base.bringToBack();
+    map.removeLayer(labels); labels = labelsFor(t === "dark").addTo(map);
   }
+  // colour-blind palette toggle (persisted)
+  const cbTog = document.getElementById("cbToggle");
+  cbTog.checked = cbPalette;
+  cbTog.onchange = () => {
+    cbPalette = cbTog.checked; localStorage.setItem("cbPalette", cbPalette ? "1" : "0"); refresh();
+  };
   document.getElementById("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
   // ---- guide modal (tabbed) ---------------------------------------------
@@ -1010,5 +1220,47 @@
     setMode("balanced");
   }
   hashReady = true; writeHash();
-  if (!localStorage.getItem("seenGuide")) { openGuide("start"); localStorage.setItem("seenGuide", "1"); }
+
+  // ---- first-visit coach marks (3 quick steps instead of the full guide) --
+  function runCoach() {
+    const steps = [
+      ["#modeSeg", "Pick a lens", "Live, Balanced or Invest — the map recolours instantly."],
+      ["#askBtn", "Ask in plain English", "Try “$650k family home near a train” — answered from the data."],
+      ["#infopanel", "Tap any suburb", "Full scorecard: safety, prices, yield, schools, zoning, hazards."],
+    ];
+    let i = 0;
+    const ov = document.createElement("div"); ov.id = "coach";
+    document.body.appendChild(ov);
+    const show = () => {
+      const [selq, h, body] = steps[i];
+      const t = document.querySelector(selq);
+      const r = t && t.offsetParent !== null ? t.getBoundingClientRect() : null;
+      ov.innerHTML = `<div class="coach-bubble" role="dialog" aria-label="${h}">
+        <b>${h}</b><p>${body}</p>
+        <div class="coach-foot"><span class="coach-dots">${steps.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("")}</span>
+        <button class="btn ghost" id="coachSkip">Skip</button>
+        <button class="btn" id="coachNext">${i === steps.length - 1 ? "Done" : "Next"}</button></div></div>`;
+      const bub = ov.querySelector(".coach-bubble");
+      if (r) {
+        const top = Math.min(innerHeight - 170, r.bottom + 12);
+        bub.style.top = top + "px";
+        bub.style.left = Math.max(10, Math.min(innerWidth - 290, r.left)) + "px";
+      } else { bub.classList.add("center"); }
+      ov.querySelector("#coachSkip").onclick = done;
+      ov.querySelector("#coachNext").onclick = () => (++i < steps.length ? show() : done());
+    };
+    const done = () => { ov.remove(); localStorage.setItem("seenCoach", "1"); };
+    show();
+  }
+  if (!localStorage.getItem("seenCoach")) {
+    localStorage.setItem("seenGuide", "1");   // don't double up with the old auto-guide
+    setTimeout(runCoach, 700);
+  }
+
+  // dismiss the boot skeleton now everything is painted
+  boot.classList.add("done"); setTimeout(() => boot.remove(), 500);
+
+  // conservative offline support: network-first, cache fallback (HTTPS only)
+  if ("serviceWorker" in navigator && location.protocol === "https:")
+    navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

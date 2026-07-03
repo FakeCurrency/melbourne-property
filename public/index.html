@@ -2,21 +2,40 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.basemaps.cartocdn.com; connect-src 'self' https://nominatim.openstreetmap.org; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'" />
 <title>Melbourne Property — live, invest &amp; develop scores by suburb</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/app.css?v=19" />
+<meta name="description" content="Every Greater Melbourne suburb scored for liveability and development potential — crime, prices, rents, yield, schools, trains, zoning and hazards from public government data." />
+<meta name="theme-color" content="#1c1c1e" />
+<meta property="og:title" content="Melbourne Property — suburb scores" />
+<meta property="og:description" content="361 Melbourne suburbs scored for living and investing: safety, prices, yield, schools, trains, zoning. Free, government data." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://fakecurrency.github.io/melbourne-property/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="css/app.css?v=20" />
 </head>
 <body>
+
+<!-- boot skeleton: removed by app.js once data + map are ready -->
+<div id="boot" aria-hidden="true">
+  <div class="boot-inner">
+    <span class="boot-mark"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.5A6.5 6.5 0 1 0 5.5 10.5C5.5 15.2 12 21 12 21Z" fill="#0a84ff"/><circle cx="12" cy="10.2" r="2.2" fill="#fff"/></svg></span>
+    <div class="boot-t">Melbourne Property</div>
+    <div class="boot-s">Loading 361 suburbs…</div>
+    <div class="boot-bar"><i></i></div>
+  </div>
+</div>
 
 <!-- full-bleed map canvas -->
 <div id="map"></div>
 
 <!-- floating command bar -->
 <header id="topbar" class="glass">
-  <button class="tb-icon dock-tog" title="Show / hide controls"
-          onclick="document.getElementById('dock').classList.toggle('collapsed')" aria-label="Toggle controls"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <button class="tb-icon dock-tog" id="dockTog" title="Show / hide controls" aria-label="Toggle controls"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <div class="brand"><span class="mark"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.5A6.5 6.5 0 1 0 5.5 10.5C5.5 15.2 12 21 12 21Z" fill="currentColor"/><circle cx="12" cy="10.2" r="2.2" fill="#fff"/></svg></span><span class="bname">Melbourne&nbsp;Property</span></div>
 
   <div class="seg modes" id="modeSeg">
@@ -74,6 +93,8 @@
       <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg> Show electricity network</label>
     <label class="elec-toggle"><input type="checkbox" id="stnToggle" />
       <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="13" rx="2.5"/><path d="M6 10h12M9.5 16 7 20M14.5 16 17 20"/></svg> Show train stations</label>
+    <label class="elec-toggle"><input type="checkbox" id="cbToggle" />
+      <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17"/></svg> Colour-blind palette</label>
     <button class="w-btn" id="weightsBtn" title="Rebuild the scores with your own pillar weights — everything recomputes live"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h7M15.5 7H20M4 12h2.5M11 12h9M4 17h10M18.5 17H20"/><circle cx="13" cy="7" r="2"/><circle cx="8.5" cy="12" r="2"/><circle cx="16.5" cy="17" r="2"/></svg> Customise weights</button>
   </div>
 
@@ -90,7 +111,7 @@
     <div class="lists-head">Top suburbs by <b id="listLabel">Overall</b></div>
     <ol id="topList" class="ranklist"></ol>
   </section>
-  <div class="panel-foot"><span id="genline"></span></div>
+  <div class="panel-foot"><span id="genline"></span><span class="disclaimer">General information from public data — not financial advice.</span></div>
 </aside>
 
 <div id="askModal" class="modal hidden" aria-hidden="true">
@@ -111,6 +132,7 @@
       <button data-q="$700k family home near a train">$700k family, near train</button>
       <button data-q="best rental yield under $600k">Yield under $600k</button>
       <button data-q="$450k unit somewhere safe">$450k unit, safe</button>
+      <button data-q="rent under $550 a week somewhere safe">Rent &lt;$550/wk</button>
     </div>
     <p class="w-intro" id="askSummary"></p>
     <div id="askResults"></div>
@@ -297,6 +319,20 @@
         <strong>Remaining limitations</strong><br>
         Electricity <em>spare capacity</em> is commercially sensitive, so grid support uses proximity/density proxies. Height limits and non-heritage overlays (DDO etc.) aren't scored yet. Each scorecard's "Data coverage" line tells you when a figure is LGA-level rather than suburb-level.
       </div>
+      <div class="note-box">
+        <strong>Not financial advice</strong><br>
+        This is a data exploration tool built from public statistics. Scores compare suburbs
+        <em>relative to each other</em> — they are not valuations, forecasts or personal advice.
+        Always do your own due diligence and speak to licensed professionals before buying.
+      </div>
+      <div class="source-block">
+        <h5>Attribution &amp; licences</h5>
+        <p class="small">Source data © Commonwealth of Australia (ABS), © State of Victoria
+        (CSA, DFFH, DTP, Department of Education, DEECA/Vicmap) and © Geoscience Australia,
+        used under <strong>CC BY 4.0</strong>. Basemap © OpenStreetMap contributors, © CARTO.
+        Address search by Nominatim/OSM. This site aggregates and ranks that data; errors and
+        omissions are possible — check the primary sources for decisions.</p>
+      </div>
       <p class="small">All data is public and government-sourced. Scores are percentile-ranked within Greater Melbourne only.</p>
     </div>
 
@@ -306,9 +342,13 @@
   </div>
 </div>
 
-<script>if (window.innerWidth < 900) document.getElementById('dock').classList.add('collapsed');</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/app.js?v=19"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/app.js?v=20"></script>
+<!-- Analytics (disabled). To enable privacy-friendly counts with no cookies:
+     1. create a free goatcounter.com account (or self-host Plausible),
+     2. uncomment the line below with your code,
+     3. add the script + API origins to the CSP script-src/connect-src above.
+<script data-goatcounter="https://YOURCODE.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script> -->
+
 </body>
 </html>

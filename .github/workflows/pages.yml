@@ -1,5 +1,9 @@
 name: Deploy to GitHub Pages
 
+# Builds the deployed copy on the runner: injects a per-deploy cache-busting
+# version (the run number) into asset URLs and DATA_V, then minifies JS/CSS.
+# The repo copies stay readable — only the uploaded artifact is transformed.
+
 on:
   push:
     branches: [main]
@@ -22,6 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Inject cache-busting versions (run ${{ github.run_number }})
+        run: |
+          sed -i 's/?v=[0-9]*/?v=${{ github.run_number }}/g' public/index.html
+          sed -i 's/const DATA_V = "[0-9]*"/const DATA_V = "${{ github.run_number }}"/' public/js/app.js
+          grep -o '?v=[0-9]*' public/index.html | head -1
+          grep -o 'DATA_V = "[0-9]*"' public/js/app.js
+
+      - name: Minify JS + CSS
+        run: |
+          npx --yes esbuild@0.24.2 public/js/app.js --minify --target=es2019 \
+            --allow-overwrite --outfile=public/js/app.js
+          npx --yes esbuild@0.24.2 public/css/app.css --minify \
+            --allow-overwrite --outfile=public/css/app.css
+          ls -la public/js/app.js public/css/app.css
+
       - uses: actions/configure-pages@v5
         with:
           enablement: true

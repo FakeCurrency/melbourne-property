@@ -130,6 +130,8 @@ def get_prices(name_by_code: dict[str, str]) -> dict[str, dict]:
             "house_3yr_cagr": _avg([m["cagr3"] for m in h]),
             "house_year": max((m["year"] for m in h), default=None),
             "median_unit": _avg([m["median"] for m in u]),
+            "unit_12m": _avg([m["m12"] for m in u]),
+            "unit_3yr_cagr": _avg([m["cagr3"] for m in u]),
             "unit_year": max((m["year"] for m in u), default=None),
             "house_series": house_series,
             "matched": matched,

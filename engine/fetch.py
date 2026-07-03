@@ -20,7 +20,22 @@ _SESSION = requests.Session()
 _SESSION.headers.update(_HEADERS)
 
 
-def fetch(url: str, filename: str | None = None, force: bool = False) -> Path:
+def fresh(path: Path, max_age_days: float | None) -> bool:
+    """True if ``path`` exists, is non-empty, and is younger than ``max_age_days``.
+
+    Quarterly sources (crime, rents, ERP) go stale silently if cached forever —
+    pass an age so a long-lived local checkout re-fetches them eventually.
+    ``None`` = never expires (static archives like Census 2021, shapefiles).
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    if max_age_days is None:
+        return True
+    return (time.time() - path.stat().st_mtime) < max_age_days * 86400
+
+
+def fetch(url: str, filename: str | None = None, force: bool = False,
+          max_age_days: float | None = None) -> Path:
     """Download ``url`` into data_raw/ and return the local path (cached).
 
     Government hosts can be very slow from datacenter IPs (GitHub Actions), so
@@ -29,7 +44,7 @@ def fetch(url: str, filename: str | None = None, force: bool = False) -> Path:
     config.DATA_RAW.mkdir(parents=True, exist_ok=True)
     name = filename or url.split("/")[-1].split("?")[0]
     dest = config.DATA_RAW / name
-    if dest.exists() and dest.stat().st_size > 0 and not force:
+    if fresh(dest, max_age_days) and not force:
         print(f"  cached  {name} ({dest.stat().st_size/1e6:.1f} MB)")
         return dest
 
@@ -114,9 +129,19 @@ def arcgis_query_all(layer_url: str, out_fields: str, where: str = "1=1") -> lis
             "resultRecordCount": page,
             "f": "json",
         }
-        r = requests.get(layer_url + "/query", params=params, headers=_HEADERS, timeout=120)
-        r.raise_for_status()
-        data = r.json()
+        data = None
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                r = requests.get(layer_url + "/query", params=params, headers=_HEADERS, timeout=120)
+                r.raise_for_status()
+                data = r.json()
+                break
+            except Exception as e:  # noqa: BLE001 - retry transient ArcGIS errors
+                last_err = e
+                time.sleep(3 * (attempt + 1))
+        if data is None:
+            raise RuntimeError(f"ArcGIS query failed for {layer_url}: {last_err}")
         feats = data.get("features", [])
         rows.extend(f["attributes"] for f in feats)
         if not data.get("exceededTransferLimit") or not feats:

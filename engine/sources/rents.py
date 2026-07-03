@@ -27,10 +27,32 @@ import openpyxl
 
 from ..fetch import fetch, fetch_wayback
 
-# Latest quarter's workbooks (dffh.vic.gov.au slugs redirect to the xlsx asset).
+# Pinned fallback quarter (dffh.vic.gov.au slugs redirect to the xlsx asset).
+# At build time we ask the data.vic CKAN catalogue for the NEWEST resource in
+# each package so the data self-upgrades when DFFH publishes a quarter.
 RENTS_URL = "https://www.dffh.vic.gov.au/moving-annual-rent-suburb-september-quarter-2025-excel"
 RENTS_LGA_URL = "https://www.dffh.vic.gov.au/quarterly-median-rents-local-government-area-september-quarter-2025-excel"
 RENTS_QUARTER = "Sep 2025"
+_CKAN = "https://discover.data.vic.gov.au/api/3/action/package_show"
+_PKG_SUBURB = "rental-report-quarterly-moving-annual-rents-by-suburb"
+_PKG_LGA = "rental-report-quarterly-quarterly-median-rents-by-lga"
+
+
+def _latest_resource(package: str, fallback: str) -> tuple[str, str]:
+    """(url, label) of the newest resource in a CKAN package; pinned fallback."""
+    import requests
+    try:
+        r = requests.get(_CKAN, params={"id": package},
+                         headers={"User-Agent": "Mozilla/5.0 (melb-scorer)"}, timeout=45)
+        res = r.json()["result"]["resources"]
+        best = max(res, key=lambda x: x.get("created") or "")
+        url = best.get("url") or fallback
+        m = re.search(r"(march|june|september|december)-quarter-(\d{4})", url)
+        label = f"{m.group(1)[:3].title()} {m.group(2)}" if m else RENTS_QUARTER
+        return url, label
+    except Exception as e:  # noqa: BLE001 - catalogue down -> pinned quarter
+        print(f"  rents: CKAN lookup failed ({e}) — using pinned {RENTS_QUARTER}")
+        return fallback, RENTS_QUARTER
 
 
 def _num(v):
@@ -58,6 +80,7 @@ def _load_sheet(ws) -> dict[str, dict]:
     if not med_cols:
         return {}
     latest_ci, prev_ci = med_cols[-1], (med_cols[-5] if len(med_cols) >= 5 else None)
+    count_ci = latest_ci - 1     # Count column sits immediately left of each Median
     out = {}
     for r in rows[qrow + 2:]:
         name = r[1] if len(r) > 1 else None
@@ -68,8 +91,9 @@ def _load_sheet(ws) -> dict[str, dict]:
             continue
         latest = _num(r[latest_ci]) if latest_ci < len(r) else None
         prev = _num(r[prev_ci]) if prev_ci is not None and prev_ci < len(r) else None
+        bonds = _num(r[count_ci]) if 0 <= count_ci < len(r) else None
         if latest:
-            out[name.upper()] = {"latest": latest, "prev4": prev}
+            out[name.upper()] = {"latest": latest, "prev4": prev, "bonds": bonds}
     return out
 
 
@@ -114,18 +138,21 @@ def _avg(vals):
 
 def get_rents(name_by_code: dict[str, str],
               lga_by_code: dict[str, str] | None = None) -> dict[str, dict]:
-    """{sa2_code: {rent_weekly, rent_12m, house_rent, flat_rent, rent_quarter, rent_source}}"""
+    """{sa2_code: {rent_weekly, rent_12m, house_rent, flat_rent, rent_bonds,
+                   rent_quarter, rent_source}}"""
     def _dffh(url: str, fname: str):
         # dffh.vic.gov.au is very slow / bot-hostile from datacenter IPs — fall
         # back to the Wayback Machine if the direct download keeps timing out.
         try:
-            return fetch(url, fname)
+            return fetch(url, fname, max_age_days=60)
         except Exception as e:  # noqa: BLE001
             print(f"  direct DFFH download failed ({e}); trying Wayback ...")
             return fetch_wayback(url, fname)
 
+    sub_url, quarter = _latest_resource(_PKG_SUBURB, RENTS_URL)
+    lga_url, _ = _latest_resource(_PKG_LGA, RENTS_LGA_URL)
     try:
-        allp, house, flat = _load_workbook_sheets(_dffh(RENTS_URL, "dffh_rents_by_suburb.xlsx"))
+        allp, house, flat = _load_workbook_sheets(_dffh(sub_url, "dffh_rents_by_suburb.xlsx"))
     except Exception as e:  # noqa: BLE001 - the workflow's coverage guard stops a bad commit
         print(f"  suburb rents workbook unavailable ({e}); shipping no rents this build")
         allp, house, flat = {}, {}, {}
@@ -134,7 +161,7 @@ def get_rents(name_by_code: dict[str, str],
     # (DFFH throttles back-to-back downloads from one IP).
     try:
         time.sleep(20)
-        lga_allp, lga_house, lga_flat = _load_workbook_sheets(_dffh(RENTS_LGA_URL, "dffh_rents_by_lga.xlsx"))
+        lga_allp, lga_house, lga_flat = _load_workbook_sheets(_dffh(lga_url, "dffh_rents_by_lga.xlsx"))
     except Exception as e:  # noqa: BLE001
         print(f"  LGA rents workbook unavailable ({e}); using suburb-level rents only")
         lga_allp, lga_house, lga_flat = {}, {}, {}
@@ -159,6 +186,9 @@ def get_rents(name_by_code: dict[str, str],
             "rent_12m": round((rw - prev) / prev * 100, 1) if rw and prev else None,
             "house_rent": _avg([house[g]["latest"] for g in groups if g in house]),
             "flat_rent": _avg([flat[g]["latest"] for g in groups if g in flat]),
+            # annual bond lodgements = rental-market liquidity (thin markets rank
+            # alongside liquid ones otherwise)
+            "rent_bonds": _avg([allp[g]["bonds"] for g in groups if g in allp and allp[g].get("bonds")]),
             "rent_source": "suburb" if rw else None,
         }
         # LGA fallback for the (post-2000) growth suburbs the DFFH list never named.
@@ -173,12 +203,12 @@ def get_rents(name_by_code: dict[str, str],
                 rec["house_rent"] = (lga_house.get(lga) or {}).get("latest")
                 rec["flat_rent"] = (lga_flat.get(lga) or {}).get("latest")
                 rec["rent_source"] = "lga"
-        rec["rent_quarter"] = RENTS_QUARTER if rec["rent_weekly"] else None
+        rec["rent_quarter"] = quarter if rec["rent_weekly"] else None
         out[code] = rec
     cov = sum(1 for v in out.values() if v["rent_weekly"])
     sub = sum(1 for v in out.values() if v["rent_source"] == "suburb")
     print(f"  rents: {cov}/{len(out)} SA2s covered ({sub} suburb-level, "
-          f"{cov - sub} LGA fallback; {RENTS_QUARTER})")
+          f"{cov - sub} LGA fallback; {quarter})")
     return out
 
 

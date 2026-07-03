@@ -38,9 +38,12 @@ ZONES_URL = ("https://plan-gis.mapshare.vic.gov.au/arcgis/rest/services/Planning
 OVERLAYS_URL = ("https://plan-gis.mapshare.vic.gov.au/arcgis/rest/services/Planning/"
                 "Vicplan_PlanningSchemeOverlays/MapServer/0/query")
 OVERLAY_WHERE = ("ZONE_CODE LIKE 'HO%' OR ZONE_CODE LIKE 'FO%' OR ZONE_CODE LIKE 'LSIO%' "
-                 "OR ZONE_CODE LIKE 'SBO%' OR ZONE_CODE LIKE 'RFO%' OR ZONE_CODE LIKE 'BMO%'")
+                 "OR ZONE_CODE LIKE 'SBO%' OR ZONE_CODE LIKE 'RFO%' OR ZONE_CODE LIKE 'BMO%' "
+                 "OR ZONE_CODE LIKE 'MAEO%' OR ZONE_CODE LIKE 'AEO%'")
 FLOOD_CODES = {"FO", "LSIO", "SBO", "RFO"}
 FIRE_CODES = {"BMO"}
+NOISE_CODES = {"MAEO", "AEO"}            # airport-environs overlays = aircraft noise
+PARKS_CODES = {"PPRZ", "PCRZ"}           # public parks + conservation (green space)
 # Zones where people live — these sample points drive the distance metrics.
 # Tiered: established urban residential first; UGZ (future estates) and LDRZ
 # (sparse hobby-farm lots, which area-weighting exaggerates) only as fallbacks —
@@ -123,15 +126,26 @@ def _query(url, bbox, out_fields, where="1=1"):
     env = {"xmin": bbox[0], "ymin": bbox[1], "xmax": bbox[2], "ymax": bbox[3],
            "spatialReference": {"wkid": 4326}}
     while True:
-        r = requests.post(url, data={
-            "geometry": json.dumps(env), "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-            "spatialRel": "esriSpatialRelIntersects", "where": where,
-            "outFields": out_fields, "returnGeometry": "true", "outSR": 4326,
-            "maxAllowableOffset": 0.0003, "geometryPrecision": 5,
-            "resultOffset": offset, "f": "geojson",
-        }, headers=_HEADERS, timeout=120)
-        r.raise_for_status()
-        page = r.json().get("features", [])
+        page = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                r = requests.post(url, data={
+                    "geometry": json.dumps(env), "geometryType": "esriGeometryEnvelope", "inSR": 4326,
+                    "spatialRel": "esriSpatialRelIntersects", "where": where,
+                    "outFields": out_fields, "returnGeometry": "true", "outSR": 4326,
+                    "maxAllowableOffset": 0.0003, "geometryPrecision": 5,
+                    "resultOffset": offset, "f": "geojson",
+                }, headers=_HEADERS, timeout=120)
+                r.raise_for_status()
+                page = r.json().get("features", [])
+                break
+            except Exception as e:  # noqa: BLE001 - transient VicPlan hiccups
+                last_err = e
+                import time
+                time.sleep(2 * (attempt + 1))
+        if page is None:
+            raise RuntimeError(f"VicPlan query failed: {last_err}")
         feats.extend(page)
         if len(page) < 1000:
             return feats
@@ -156,7 +170,7 @@ def _shares_for(sa2_geom: dict) -> dict | None:
                 if f.get("geometry")]
 
     mix: dict[str, int] = {}
-    classified = heritage = flood = fire = 0
+    classified = heritage = flood = fire = noise = 0
     res_points: list[list[float]] = []
     ugz_points: list[list[float]] = []
     ldrz_points: list[list[float]] = []
@@ -175,19 +189,21 @@ def _shares_for(sa2_geom: dict) -> dict | None:
                 ugz_points.append([round(x, 4), round(y, 4)])
             elif code in RESIDENTIAL_LDRZ:
                 ldrz_points.append([round(x, 4), round(y, 4)])
-        hit_h = hit_f = hit_b = False
+        hit_h = hit_f = hit_b = hit_n = False
         for op, ob, oc in overlays:
-            if hit_h and hit_f and hit_b:
+            if hit_h and hit_f and hit_b and hit_n:
                 break
             kind = ("h" if oc.startswith("HO") else
                     "f" if oc in FLOOD_CODES else
-                    "b" if oc in FIRE_CODES else None)
-            if kind is None or (kind == "h" and hit_h) or (kind == "f" and hit_f) or (kind == "b" and hit_b):
+                    "b" if oc in FIRE_CODES else
+                    "n" if oc in NOISE_CODES else None)
+            if kind is None or {"h": hit_h, "f": hit_f, "b": hit_b, "n": hit_n}[kind]:
                 continue
             if ob[0] <= x <= ob[2] and ob[1] <= y <= ob[3] and _in_polys(x, y, op):
                 if kind == "h": heritage += 1; hit_h = True
                 elif kind == "f": flood += 1; hit_f = True
-                else: fire += 1; hit_b = True
+                elif kind == "b": fire += 1; hit_b = True
+                else: noise += 1; hit_n = True
     if classified < 8:
         return None
 
@@ -199,9 +215,11 @@ def _shares_for(sa2_geom: dict) -> dict | None:
     return {
         "growth_share": growth, "standard_share": standard, "restrict_share": restrict,
         "ugz_share": share({"UGZ"}),
+        "parks_share": share(PARKS_CODES),
         "heritage_share": round(heritage / len(pts), 4),
         "flood_share": round(flood / len(pts), 4),
         "bushfire_share": round(fire / len(pts), 4),
+        "noise_share": round(noise / len(pts), 4),
         "zoning_raw": round(growth + 0.45 * standard - 0.35 * restrict, 4),
         "zone_mix": [[c, round(n / classified, 3)] for c, n in top],
         "res_points": res_points, "ugz_points": ugz_points, "ldrz_points": ldrz_points,
@@ -212,9 +230,12 @@ def _shares_for(sa2_geom: dict) -> dict | None:
 def get_zoning(features_by_code: dict[str, dict]) -> dict[str, dict]:
     """{sa2_code: {growth_share, standard_share, restrict_share, heritage_share,
                    zoning_raw, zone_mix}} — cached, resumable."""
-    cache_path = config.DATA_RAW / "vicplan_shares_v3.json"
+    from ..fetch import fresh
+    cache_path = config.DATA_RAW / "vicplan_shares_v4.json"
     cache: dict[str, dict] = {}
-    if cache_path.exists() and cache_path.stat().st_size > 0:
+    # Age-gated: rezonings (HCTZ rollouts, new precincts) must eventually show
+    # up without anyone remembering to delete the cache by hand.
+    if fresh(cache_path, 60):
         cache = json.loads(cache_path.read_text(encoding="utf-8"))
 
     todo = [c for c in features_by_code if c not in cache]

@@ -33,16 +33,43 @@ import shapefile
 from .. import config, geo
 from ..fetch import fetch
 
-# Latest CSA "Recorded offences by LGA" workbook (year ending March 2026).
-CRIME_XLSX_URL = (
-    "https://files.crimestatistics.vic.gov.au/2026-06/"
-    "Data_Tables_LGA_Recorded_Offences_Year_Ending_March_2026.xlsx"
-)
-# CSA "Criminal incidents" workbook — Table 03 has the suburb/town breakdown.
-INCIDENTS_XLSX_URL = (
-    "https://files.crimestatistics.vic.gov.au/2026-06/"
-    "Data_Tables_LGA_Criminal_Incidents_Year_Ending_March_2026.xlsx"
-)
+# Pinned fallback release (year ending March 2026). CSA publishes quarterly on
+# a fixed URL pattern — _discover_csa() probes newer quarters first so the data
+# self-upgrades when a release lands.
+_CSA_BASE = "https://files.crimestatistics.vic.gov.au"
+_CSA_PIN = ("2026-06", "March", 2026)   # (folder, quarter-ending month, year)
+_CSA_SEQ = ["March", "June", "September", "December"]
+
+
+def _csa_candidates():
+    """Newest-first candidate (folder, month, year) tuples from the pinned one."""
+    folder, month, year = _CSA_PIN
+    i = _CSA_SEQ.index(month)
+    fy, fm = int(folder.split("-")[0]), int(folder.split("-")[1])
+    cands = []
+    for step in (4, 3, 2, 1, 0):        # up to 4 quarters ahead of the pin
+        qi = (i + step) % 4
+        yr = year + (i + step) // 4
+        months_ahead = 3 * step
+        f_y, f_m = fy + (fm - 1 + months_ahead) // 12, (fm - 1 + months_ahead) % 12 + 1
+        cands.append((f"{f_y}-{f_m:02d}", _CSA_SEQ[qi], yr))
+    return cands
+
+
+def _discover_csa(kind: str, fname: str):
+    """Fetch the newest available CSA workbook of ``kind``; pinned fallback."""
+    from ..fetch import fresh
+    dest = config.DATA_RAW / fname
+    if fresh(dest, 60):
+        print(f"  cached  {fname}")
+        return dest
+    for folder, month, year in _csa_candidates():
+        url = f"{_CSA_BASE}/{folder}/Data_Tables_LGA_{kind}_Year_Ending_{month}_{year}.xlsx"
+        try:
+            return fetch(url, fname, force=True)
+        except Exception:
+            continue
+    raise RuntimeError(f"No CSA {kind} workbook reachable (tried 5 quarters)")
 LGA_SHP_URL = (
     "https://www.abs.gov.au/statistics/standards/"
     "australian-statistical-geography-standard-asgs/edition-3-july-2021-june-2026/"
@@ -63,12 +90,13 @@ def _norm_lga(name: str) -> str:
 
 def _offences_by_lga() -> dict[str, dict]:
     """{lga_key: {person, property, total}} rates per 100k for the latest year."""
+    from ..fetch import fresh
     cache = config.DATA_RAW / "crime_offences_by_lga.json"
-    if cache.exists() and cache.stat().st_size > 0:
+    if fresh(cache, 60):
         print("  cached  crime_offences_by_lga.json")
         return json.loads(cache.read_text(encoding="utf-8"))
 
-    path = fetch(CRIME_XLSX_URL, "csa_lga_recorded_offences.xlsx")
+    path = _discover_csa("Recorded_Offences", "csa_lga_recorded_offences.xlsx")
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
 
     # Table 01: LGA totals -> implied population = count / rate * 100k
@@ -191,13 +219,15 @@ def _sa2_localities(name: str) -> list[str]:
 
 
 def _incidents_by_suburb(metro_lgas: set[str]) -> dict[str, dict]:
-    """{SUBURB: {person, property, total}} incident counts, latest year, metro LGAs."""
-    cache = config.DATA_RAW / "crime_incidents_by_suburb.json"
-    if cache.exists() and cache.stat().st_size > 0:
-        print("  cached  crime_incidents_by_suburb.json")
+    """{SUBURB: {person, property, total, person_prev}} incident counts —
+    latest year plus person counts four years earlier (for the trend arrow)."""
+    from ..fetch import fresh
+    cache = config.DATA_RAW / "crime_incidents_by_suburb_v2.json"
+    if fresh(cache, 60):
+        print("  cached  crime_incidents_by_suburb_v2.json")
         return json.loads(cache.read_text(encoding="utf-8"))
 
-    path = fetch(INCIDENTS_XLSX_URL, "csa_lga_criminal_incidents.xlsx")
+    path = _discover_csa("Criminal_Incidents", "csa_lga_criminal_incidents.xlsx")
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["Table 03"]
     latest = 0
@@ -210,19 +240,25 @@ def _incidents_by_suburb(metro_lgas: set[str]) -> dict[str, dict]:
         rows.append((y, _norm_lga(lga), str(suburb).strip().upper(), str(div), float(count)))
     wb.close()
 
-    counts: dict[str, dict] = defaultdict(lambda: {"person": 0.0, "property": 0.0, "total": 0.0})
+    prev_year = latest - 4
+    counts: dict[str, dict] = defaultdict(
+        lambda: {"person": 0.0, "property": 0.0, "total": 0.0, "person_prev": 0.0})
     for y, lga, suburb, div, count in rows:
-        if y != latest or lga not in metro_lgas:
+        if lga not in metro_lgas:
             continue
         c = counts[suburb]
-        c["total"] += count
-        if div.startswith("A "):
-            c["person"] += count
-        elif div.startswith("B "):
-            c["property"] += count
+        if y == latest:
+            c["total"] += count
+            if div.startswith("A "):
+                c["person"] += count
+            elif div.startswith("B "):
+                c["property"] += count
+        elif y == prev_year and div.startswith("A "):
+            c["person_prev"] += count
     out = dict(counts)
     cache.write_text(json.dumps(out), encoding="utf-8")
-    print(f"  crime: suburb incident counts for {len(out)} metro localities, year {latest}")
+    print(f"  crime: suburb incident counts for {len(out)} metro localities, "
+          f"year {latest} (trend vs {prev_year})")
     return out
 
 
@@ -244,7 +280,8 @@ def get_crime_suburb(name_by_code: dict[str, str],
         for loc in _sa2_localities(name):
             loc2sa2[loc].append(code)
 
-    alloc: dict[str, dict] = defaultdict(lambda: {"person": 0.0, "property": 0.0, "total": 0.0})
+    alloc: dict[str, dict] = defaultdict(
+        lambda: {"person": 0.0, "property": 0.0, "total": 0.0, "person_prev": 0.0})
     for loc, c in counts.items():
         sa2s = loc2sa2.get(loc)
         if not sa2s:
@@ -255,8 +292,8 @@ def get_crime_suburb(name_by_code: dict[str, str],
         for s in sa2s:
             w = pop_by_code[s] / pop_sum
             a = alloc[s]
-            for k in ("person", "property", "total"):
-                a[k] += c[k] * w
+            for k in ("person", "property", "total", "person_prev"):
+                a[k] += c.get(k, 0.0) * w
 
     out = {}
     for code in name_by_code:
@@ -265,7 +302,13 @@ def get_crime_suburb(name_by_code: dict[str, str],
         if not pop or not a or a["total"] <= 0:
             out[code] = {}
             continue
-        out[code] = {k: round(v / pop * 1e5, 1) for k, v in a.items()}
+        rec = {k: round(v / pop * 1e5, 1) for k, v in a.items() if k != "person_prev"}
+        # personal-crime direction over ~4 years (same denominator both sides,
+        # so population drift cancels out of the ratio)
+        if a["person_prev"] >= 20 and a["person"] >= 20:
+            rec["person_trend_pct"] = round((a["person"] - a["person_prev"])
+                                            / a["person_prev"] * 100, 1)
+        out[code] = rec
     matched = sum(1 for v in out.values() if v)
     print(f"  crime: suburb-level rates for {matched}/{len(out)} SA2s (rest fall back to LGA)")
     return out
@@ -274,13 +317,14 @@ def get_crime_suburb(name_by_code: dict[str, str],
 def get_postcode_map(name_by_code: dict[str, str],
                      lga_by_code: dict[str, str]) -> dict[str, list[str]]:
     """{postcode: [sa2_codes]} for search — from CSA Table 03's postcode column."""
+    from ..fetch import fresh
     cache = config.DATA_RAW / "crime_postcodes.json"
-    if cache.exists() and cache.stat().st_size > 0:
+    if fresh(cache, 180):
         print("  cached  crime_postcodes.json")
         pc2loc = json.loads(cache.read_text(encoding="utf-8"))
     else:
         metro_lgas = {_norm_lga(v) for v in lga_by_code.values() if v}
-        path = fetch(INCIDENTS_XLSX_URL, "csa_lga_criminal_incidents.xlsx")
+        path = _discover_csa("Criminal_Incidents", "csa_lga_criminal_incidents.xlsx")
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
         pairs = set()
         for _y, _end, lga, pc, suburb, *_rest in wb["Table 03"].iter_rows(min_row=2, values_only=True):

@@ -4,16 +4,27 @@ name: Refresh Data
 # (ABS, CSA Victoria, Valuer-General, Geoscience Australia, Vicmap Planning)
 # and commits the result to main — which triggers the Pages deploy.
 #
-# A coverage guard compares the new scores.json against the committed one and
-# refuses to commit if any data layer (rents, prices, zoning, suburb crime)
-# lost coverage — a flaky source can never degrade the live dataset.
+# Guards:
+#   - coverage guard: refuses to commit if any data layer (rents, prices,
+#     zoning, suburb crime) lost coverage — a flaky source can never degrade
+#     the live dataset.
+#   - grade-drift guard: warns loudly if more than ~12% of suburbs change
+#     letter grade in one refresh (a sign a source shifted methodology).
+#
+# Before the build, the committed grades are snapshotted to
+# public/data/prev-scores.json so the site can show grade-trend arrows.
+#
+# data_raw/ is cached between runs; engine/fetch.py's fresh() age gates decide
+# per-file when a source is stale enough to re-download.
 #
 # The optional restore_sha input skips the build and restores public/data
 # from that commit instead (escape hatch for bad data commits).
 #
-# Manual for now; re-add a monthly cron once a few runs have proven reliable.
+# On failure a GitHub issue is filed automatically.
 
 on:
+  schedule:
+    - cron: "0 17 1 * *"   # monthly: 1st, 17:00 UTC = 3-4am Melbourne on the 2nd
   workflow_dispatch:
     inputs:
       restore_sha:
@@ -24,6 +35,7 @@ on:
 permissions:
   contents: write
   actions: write   # to kick the Pages deploy after committing (bot pushes don't auto-trigger it)
+  issues: write    # to file an issue when a refresh fails
 
 concurrency:
   group: refresh-data
@@ -42,9 +54,35 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Cache raw source downloads
+        if: inputs.restore_sha == ''
+        uses: actions/cache@v4
+        with:
+          path: data_raw
+          # Always miss on the exact key so the latest state is re-saved each
+          # run; restore-keys pulls the most recent previous cache.
+          key: data-raw-${{ github.run_id }}
+          restore-keys: |
+            data-raw-
+
       - name: Install dependencies
         if: inputs.restore_sha == ''
         run: pip install -r requirements.txt
+
+      - name: Snapshot previous grades (for trend arrows + drift guard)
+        if: inputs.restore_sha == ''
+        run: |
+          python - <<'PY'
+          import json
+          d = json.load(open("public/data/scores.json"))
+          snap = {
+              "generated": d.get("generated"),
+              "grades": {c: a["grade"] for c, a in d["areas"].items()},
+              "overall": {c: a["overall"] for c, a in d["areas"].items()},
+          }
+          json.dump(snap, open("public/data/prev-scores.json", "w"), separators=(",", ":"))
+          print(f"snapshotted {len(snap['grades'])} grades from {snap['generated']}")
+          PY
 
       - name: Build dataset
         if: inputs.restore_sha == ''
@@ -77,6 +115,22 @@ jobs:
               subprocess.run(["git", "checkout", "HEAD", "--", "public/data"], check=True)
           PY
 
+      - name: Guard against grade drift
+        if: inputs.restore_sha == ''
+        run: |
+          python - <<'PY'
+          import json
+          new = json.load(open("public/data/scores.json"))
+          prev = json.load(open("public/data/prev-scores.json"))
+          changed = [c for c, g in prev["grades"].items()
+                     if c in new["areas"] and new["areas"][c]["grade"] != g]
+          pct = 100 * len(changed) / max(1, len(prev["grades"]))
+          print(f"grade drift: {len(changed)} suburbs changed grade ({pct:.1f}%)")
+          if pct > 12:
+              print(f"::warning::{pct:.0f}% of suburbs changed grade this refresh — "
+                    "check whether a source changed methodology before trusting this data")
+          PY
+
       - name: Restore public/data from a previous commit
         if: inputs.restore_sha != ''
         run: git checkout "${{ inputs.restore_sha }}" -- public/data
@@ -96,5 +150,17 @@ jobs:
             # so kick the Pages deploy explicitly.
             gh workflow run pages.yml --ref main
           fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: File an issue on failure
+        if: failure()
+        run: |
+          gh issue create \
+            --title "Data refresh failed ($(date -u +%Y-%m-%d))" \
+            --body "The scheduled data refresh failed. See the run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Likely causes: a source URL moved (CSA quarter, DFFH CKAN resource, ABS ERP), a schema changed, or a timeout. The live site still serves the last good data — nothing is broken for users until this is fixed." \
+            --label "data-refresh"
         env:
           GH_TOKEN: ${{ github.token }}

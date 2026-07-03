@@ -42,28 +42,30 @@ COORD_PRECISION = 5
 # BASE weights (used in Balanced + Invest modes, where property crime still
 # matters for resale/insurance).
 LIVE_WEIGHTS = {
-    "person_safety": 0.33,   # inverse rate of crimes AGAINST THE PERSON (assault, robbery, sexual)
-    "seifa": 0.25,           # SEIFA IRSAD advantage
+    "person_safety": 0.32,   # inverse rate of crimes AGAINST THE PERSON (assault, robbery, sexual)
+    "seifa": 0.24,           # SEIFA IRSAD advantage
     "transport": 0.10,       # train-station access (nearest station distance)
-    "owner_occ": 0.09,       # owner-occupier share -> stability
+    "owner_occ": 0.08,       # owner-occupier share -> stability
     "schools": 0.07,         # school access (nearest primary/secondary + density)
-    "property_safety": 0.06, # inverse property-crime rate (secondary, transparent)
+    "property_safety": 0.05, # inverse property-crime rate (secondary, transparent)
     "family_child": 0.05,    # share of children 0-14 (family-area signal)
     "hazard_free": 0.05,     # less flood (LSIO/SBO/FO) + bushfire (BMO) overlay coverage
+    "parks": 0.04,           # public park / conservation land share (green space)
 }
 
 # FAMILY weights (used in Live / Family-First mode): for a "raise my kid here"
 # view, property crime barely matters while family/child + schools lead
 # alongside personal safety. Computed as a second Liveability value (live_family).
 LIVE_WEIGHTS_FAMILY = {
-    "person_safety": 0.33,   # personal safety still the #1 driver
-    "seifa": 0.18,           # socio-economic advantage (amenity proxy)
-    "family_child": 0.15,    # children 0-14 share weighted up for the family lens
+    "person_safety": 0.32,   # personal safety still the #1 driver
+    "seifa": 0.17,           # socio-economic advantage (amenity proxy)
+    "family_child": 0.14,    # children 0-14 share weighted up for the family lens
     "schools": 0.12,         # actual school access matters most in this lens
     "owner_occ": 0.08,       # settled owner-occupier base
     "transport": 0.07,       # train access still counts for school-run/commute
+    "parks": 0.04,           # green space matters most for the family lens
     "hazard_free": 0.04,     # flood/bushfire overlays matter for a family home
-    "property_safety": 0.03, # property crime: minimal weight for a family-living view
+    "property_safety": 0.02, # property crime: minimal weight for a family-living view
 }
 
 # Family Suitability sub-score (a highlight/badge, lightly folded into Liveability
@@ -103,11 +105,12 @@ DEV_WEIGHTS = {
 # (upzoning + station-centred activity-centre policy). Surfaced as their own
 # colour-by lenses so the HCTZ/upzoning story isn't buried by UGZ corridors.
 DEV_GREENFIELD_WEIGHTS = {
-    "ugz": 0.32,             # Urban Growth Zone share — literal greenfield precincts
-    "unrestricted": 0.14,    # NOT green wedge/farming/conservation (that land can't be developed)
-    "low_density": 0.14,     # land headroom
-    "growth": 0.12,          # corridor price momentum
-    "detached_share": 0.10,  # house-and-land stock
+    "ugz": 0.30,             # Urban Growth Zone share — literal greenfield precincts
+    "unrestricted": 0.12,    # NOT green wedge/farming/conservation (that land can't be developed)
+    "low_density": 0.12,     # land headroom
+    "pop_growth": 0.10,      # ERP year-on-year growth — where demand is actually landing
+    "growth": 0.10,          # corridor price momentum
+    "detached_share": 0.08,  # house-and-land stock
     "yield": 0.10,           # investor economics
     "infra": 0.08,           # grid support for estate-scale build-out
 }

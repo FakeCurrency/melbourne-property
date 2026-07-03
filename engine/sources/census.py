@@ -97,6 +97,35 @@ def get_housing() -> dict[str, dict]:
     return out
 
 
+def get_income() -> dict[str, dict]:
+    """{sa2_code: {income_weekly}} — median household income from the Census
+    G02 DataPack (the Digital Atlas has no G02 service). Static 2021 figures;
+    used for a price-to-income affordability ratio (caveated as 2021 income)."""
+    import csv
+    import io
+    import zipfile
+
+    from ..fetch import fetch
+    url = ("https://www.abs.gov.au/census/find-census-data/datapacks/download/"
+           "2021_GCP_SA2_for_VIC_short-header.zip")
+    path = fetch(url, "census_gcp_sa2_vic.zip")
+    out = {}
+    with zipfile.ZipFile(path) as z:
+        g02 = next(n for n in z.namelist() if "G02" in n and n.endswith(".csv"))
+        with z.open(g02) as fh:
+            for r in csv.DictReader(io.TextIOWrapper(fh, encoding="utf-8-sig")):
+                code = str(r.get("SA2_CODE_2021", "")).strip()
+                inc = r.get("Median_tot_hhd_inc_weekly")
+                try:
+                    inc = float(inc)
+                except (TypeError, ValueError):
+                    inc = None
+                if code and inc:
+                    out[code] = {"income_weekly": inc}
+    print(f"  income: household medians for {len(out)} SA2s (Census 2021 G02)")
+    return out
+
+
 if __name__ == "__main__":  # pragma: no cover
     seifa = get_seifa()
     housing = get_housing()
