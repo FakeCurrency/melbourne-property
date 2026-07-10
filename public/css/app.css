@@ -104,6 +104,13 @@ body{font:15px/1.45 var(--sans);color:var(--ink);background:var(--map-bg);
 #dock.collapsed{transform:translateX(-360px);opacity:0;pointer-events:none}
 .dock-sec{display:flex;flex-direction:column;gap:8px}
 .sec-h{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2);font-weight:600}
+/* presets disclosure: collapsed by default to keep first use simple */
+details.dock-sec summary.sec-h{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;user-select:none}
+details.dock-sec summary.sec-h::-webkit-details-marker{display:none}
+details.dock-sec summary.sec-h::after{content:"";width:7px;height:7px;border-right:1.8px solid var(--ink3);
+  border-bottom:1.8px solid var(--ink3);transform:rotate(-45deg);transition:transform .18s ease;margin-left:auto;margin-right:3px}
+details.dock-sec[open] summary.sec-h::after{transform:rotate(45deg)}
+details.dock-sec summary.sec-h:hover{color:var(--ink)}
 .modecopy{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.45}
 
 /* best buttons — inset grouped cells */
@@ -393,6 +400,7 @@ button,.preset,.cby button,.best-btn,.about-tab{transition:transform .12s ease,b
   background:var(--tint);border:0;border-radius:12px;padding:9px 10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:6px;letter-spacing:-.2px}
 .w-btn:hover{filter:brightness(1.05)}
+.w-btn.on{background:var(--accent);color:var(--accent-ink)}
 .w-btn .ic{width:16px;height:16px}
 .weights-modal{max-width:640px;background:var(--page);border:0;border-radius:18px;max-height:86vh;overflow:auto}
 [data-theme="dark"] .weights-modal{background:#1c1c1e}
@@ -555,6 +563,10 @@ html[data-theme="light"] .boot-inner { color: #1c1c1e; }
 
 /* search: keyboard-highlighted row */
 #results .res.active { background: rgba(10,132,255,.16); }
+
+/* visually hidden, still announced by screen readers */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* footer disclaimer */
 .panel-foot .disclaimer { display: block; font-size: 11px; opacity: .6; margin-top: 2px; }

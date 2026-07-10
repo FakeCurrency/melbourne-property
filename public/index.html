@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-<link rel="stylesheet" href="css/app.css?v=21" />
+<link rel="stylesheet" href="css/app.css?v=22" />
 </head>
 <body>
 
@@ -73,10 +73,10 @@
     <p class="best-cap">Highlights the <b>top ~20</b> for each goal.</p>
   </div>
 
-  <div class="dock-sec">
-    <div class="sec-h">One-click presets</div>
+  <details class="dock-sec" id="presetsBox">
+    <summary class="sec-h">One-click presets</summary>
     <div class="presets" id="presetRow"></div>
-  </div>
+  </details>
 
   <div class="dock-sec">
     <div class="blend-row"><span>Liveability</span>
@@ -158,7 +158,7 @@
 
 <div id="legend" class="legend glass"></div>
 <div id="hovercard" class="hovercard hidden"></div>
-<button id="howtoBtn" hidden></button>
+<div id="srlive" class="sr-only" role="status" aria-live="polite"></div>
 
 <div id="aboutModal" class="modal hidden" aria-hidden="true">
   <div class="modal-content about-modal glass">
@@ -274,6 +274,7 @@
 
     <div id="tab-sources" class="about-panel">
       <h4>Where the data comes from</h4>
+      <p class="small" id="freshline"></p>
       <div class="source-block">
         <h5>Electricity Infrastructure</h5>
         <p><strong>Geoscience Australia</strong> — National Electricity Transmission Lines and Substations (2024).
@@ -339,7 +340,7 @@
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="js/app.js?v=21"></script>
+<script src="js/app.js?v=22"></script>
 <!-- Analytics (disabled). To enable privacy-friendly counts with no cookies:
      1. create a free goatcounter.com account (or self-host Plausible),
      2. uncomment the line below with your code,
