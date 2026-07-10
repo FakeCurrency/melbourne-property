@@ -55,7 +55,7 @@
     ["greenfield", "Greenfield"], ["infill", "Infill"],
     ["safety", "Safety"], ["seifa", "Socio-economic"], ["family", "Family"],
     ["growth", "Price growth"], ["yield", "Yield"], ["zoning", "Zoning"],
-    ["transport", "Trains"], ["schools", "Schools"], ["grid", "Grid"],
+    ["transport", "Trains"], ["schools", "Schools"],
   ];
 
   const MODE_LABEL = { live: "Live", balanced: "Balanced", invest: "Invest / Develop" };
@@ -119,7 +119,6 @@
       case "zoning": return a.pillars.zoning.score;
       case "transport": return a.transit.score;
       case "schools": return a.schools.score;
-      case "grid": return a.infra.score;
       default: return overallOf(a);
     }
   }
@@ -148,12 +147,12 @@
     if (v == null) return { ...edge, fillColor: "#9a9aa0", fillOpacity: .18 };
     // Ask results: matched suburbs paint, everything else fades right back
     const dim = askSet ? !askSet.has(code) : v < minScore;
-    return { ...edge, fillColor: col(v), fillOpacity: (sel || !dim) ? .8 : .07 };
+    return { ...edge, fillColor: col(v), fillOpacity: (sel || !dim) ? .8 : .12 };
   };
   const layer = L.geoJSON(geo, {
     style,
     onEachFeature: (f, lyr) => lyr.on({
-      mouseover: e => { hover(f.properties.sa2_code); e.target.setStyle({ weight: 2, color: "#1c1c1e" }); },
+      mouseover: e => { hover(f.properties.sa2_code); e.target.setStyle({ weight: 2, color: document.documentElement.dataset.theme === "dark" ? "#f2f2f7" : "#1c1c1e" }); },
       mouseout: e => { hideHover(); layer.resetStyle(e.target); if (f.properties.sa2_code === selected) e.target.setStyle({ weight: 2.6, color: "#0a84ff" }); },
       click: () => select(f.properties.sa2_code, true),
     }),
@@ -219,7 +218,6 @@
     "Low social housing": "Share of social / public housing, shown for transparency.",
     "Detached headroom": "Share of low-density detached houses — room to rebuild or subdivide.",
     "Recent growth": "3-year change in median house price — recent momentum, not a forecast.",
-    "Grid support": "How well the nearby electricity network can support larger development.",
     "Rental turnover": "Share of rented dwellings — investor / tenant activity.",
     "Low density": "People per km² (inverted, so fewer people = more headroom).",
     "Train access": "Distance to the nearest metro/V-Line station, plus how many are within 3 km.",
@@ -295,7 +293,6 @@
 
   const IC = {
     fam: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.6 19a5.4 5.4 0 0 1 10.8 0"/><path d="M16 6.6a3 3 0 0 1 0 5.8M17.4 14a5 5 0 0 1 3 4.6"/></svg>',
-    bolt: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h5l-1 8 8-11h-5z"/></svg>',
     train: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="13" rx="2.5"/><path d="M6 10h12M9.5 16 7 20M14.5 16 17 20"/><circle cx="9.5" cy="13" r=".6" fill="currentColor"/><circle cx="14.5" cy="13" r=".6" fill="currentColor"/></svg>',
     school: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4 9 4.5-9 4.5-9-4.5z"/><path d="M6.5 10.8V16c0 1.2 2.5 2.5 5.5 2.5s5.5-1.3 5.5-2.5v-5.2"/></svg>',
     drop: '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5c3.1 4.1 6 7.4 6 10.5a6 6 0 1 1-12 0c0-3.1 2.9-6.4 6-10.5Z"/></svg>',
@@ -352,18 +349,6 @@
     GWZ: "Green Wedge", GWAZ: "Green Wedge A", RCZ: "Rural Conservation", FZ: "Farming",
     PCRZ: "Public Conservation", IN1Z: "Industrial 1", IN2Z: "Industrial 2", IN3Z: "Industrial 3",
   };
-  function infraBlock(a, prominent) {
-    const i = a.infra, adv = i.advantage.toLowerCase();
-    const advCls = adv === "strong" ? "strong" : adv === "moderate" ? "moderate" : "soft";
-    return `<div class="market${prominent ? "" : " mini"}">
-      <div class="market-h">Infrastructure &amp; Electricity <span class="src">Geoscience Australia</span></div>
-      <div class="market-sub">
-        <span class="sig sig-${advCls}">${i.advantage} grid support</span>
-        ${i.nearest_line_kv ? `<span class="sig sig-val">${i.nearest_line_kv} kV nearby</span>` : ""}</div>
-      <div class="market-sub icrow">${IC.bolt}${i.nearest_transmission_km != null ? i.nearest_transmission_km + " km to transmission" : "—"} · ${i.substation_count_10km} substations &lt;10 km</div>
-      ${prominent ? `<p class="market-note">${a.explanation_infra}</p>` : ""}</div>`;
-  }
-
   function renderCard(code) {
     const a = A[code]; if (!a) return;
     if (compareWith) {
@@ -374,7 +359,7 @@
     const p = a.pillars, m = a.market, lv = liveOf(a), ov = overallOf(a);
     const prominent = mode !== "live";          // price leads in Balanced/Invest, light in Live
     const chips = [`<span class="chip fam">${IC.fam} ${a.family.label} ${a.family.score}</span>`]
-      .concat(a.tags.map(t => `<span class="chip">${t}</span>`)).join("");
+      .concat(a.tags.filter(t => t !== "Grid-ready").map(t => `<span class="chip">${t}</span>`)).join("");
     const liveLab = mode === "live" ? "Liveability ·family" : "Liveability";
     sc.classList.remove("empty");
     sc.innerHTML = `
@@ -402,7 +387,7 @@
       ${prominent ? `<div class="sublens" title="Two different development stories: Greenfield = estate-scale corridor build-out (UGZ precincts); Infill = upzoned, station-centred redevelopment in established suburbs.">
         <span>Greenfield <b style="color:${col(a.dev_green)}">${a.dev_green}</b></span>
         <span>Infill <b style="color:${col(a.dev_infill)}">${a.dev_infill}</b></span></div>` : ""}
-      ${prominent ? marketBlock(a, true) + zoningBlock(a, true) + transitBlock(a, false) + infraBlock(a, true) : ""}
+      ${prominent ? marketBlock(a, true) + zoningBlock(a, true) + transitBlock(a, false) : ""}
       <div class="pgroup-h">Liveability — safety &amp; stability</div>
       ${bar("Personal safety", p.person_safety.score, p.person_safety.raw == null ? "—" : Math.round(p.person_safety.raw).toLocaleString() + "/100k")}
       ${bar("Socio-economic", p.seifa.score, "decile " + (p.seifa.decile ?? "—") + "/10")}
@@ -416,7 +401,6 @@
       ${bar("Detached headroom", p.detached.score, pct(p.detached.raw))}
       ${bar("Zoning upside", p.zoning.score, a.zoning ? a.zoning.label : "n/a")}
       ${bar("Recent growth", m.growth_score, m.house_3yr_cagr == null ? "n/a" : m.house_3yr_cagr + "%/yr")}
-      ${bar("Grid support", a.infra.score, a.infra.advantage)}
       ${bar("Rental yield", p.yield.score, p.yield.raw == null ? "n/a" : p.yield.raw + "%" + (m.yield_basis === "unit" ? " unit" : ""))}
       ${bar("Rental turnover", p.rental.score, pct(p.rental.raw), true)}
       ${bar("Low density", p.low_density.score, p.low_density.raw == null ? "—" : Math.round(p.low_density.raw).toLocaleString() + "/km²", true)}
@@ -424,7 +408,7 @@
       ${bar("Hazard-free", p.hazard_free.score, p.hazard_free.raw == null ? "n/a" : Math.round(p.hazard_free.raw * 100) + "% overlay", true)}
       <p class="summary">${a.explanation_live}</p>
       <p class="summary dev">${a.explanation_dev}</p>
-      ${prominent ? "" : marketBlock(a, false) + zoningBlock(a, false) + transitBlock(a, false) + infraBlock(a, false)}
+      ${prominent ? "" : marketBlock(a, false) + zoningBlock(a, false) + transitBlock(a, false)}
       ${coverageNote(a)}`;
     const cb = document.getElementById("cmpBtn");
     if (cb) cb.onclick = () => { comparePicking = true; renderCard(code); };
@@ -482,7 +466,6 @@
       ${nrow("Affordability", cols.map(c => c.market.afford_ratio), v => v + "× income", true, "median house ÷ median household income — lower is more affordable")}
       ${nrow("Nearest station", cols.map(c => c.transit.nearest_station_km), v => v + " km", true)}
       ${row("Zoning", cols.map(c => (c.zoning ? c.zoning.label : null)))}
-      ${row("Grid support", cols.map(c => c.infra.advantage))}
       ${!three ? `<button class="cmp-btn cmp-add" id="cmpAdd" title="Add a third column">+ Add a third suburb</button>` : ""}
       ${comparePicking ? `<p class="cmp-hint">Now tap another suburb on the map, list or search…
         <button class="cmp-x" id="cmpCancel2">cancel</button></p>` : ""}
@@ -614,7 +597,6 @@
     zoning: "Zoned-for-growth share vs protective zoning (Vicmap).",
     transport: "Train-station access from residential land.",
     schools: "Primary/secondary school access from residential land.",
-    grid: "Electricity-network support.",
   };
   const cbyRow = document.getElementById("colorByChips");
   cbyRow.innerHTML = COLORBY.map(([k, lab]) => `<button data-cby="${k}" title="${CBY_TIPS[k] || ""}">${lab}</button>`).join("");
@@ -667,7 +649,7 @@
     greenfield: "Greenfield potential", infill: "Infill potential",
     safety: "Safety (low crime)", seifa: "Socio-economic", growth: "Price growth",
     yield: "Rental yield", zoning: "Zoning upside", transport: "Train access",
-    schools: "School access", grid: "Grid support",
+    schools: "School access",
   };
   const LEGEND_DESC = {
     overall: "Blend of liveability & development", live: "How good it is to live or rent here",
@@ -677,7 +659,7 @@
     seifa: "Socio-economic advantage", family: "How suitable for families",
     growth: "Recent 3-year price growth", yield: "Gross rental yield",
     zoning: "Land zoned to grow vs protected", transport: "Train-station access",
-    schools: "School access", grid: "Electricity-network support",
+    schools: "School access",
   };
   function updateLegend() {
     const el = document.getElementById("legend");
@@ -1033,7 +1015,7 @@
     invest:  { label: "to invest",        colorBy: "dev",    score: a => 0.45 * devOf(a) + 0.3 * (a.market.growth_score ?? 50) + 0.25 * (a.pillars.yield.score ?? 50),
                how: "ranked 45% Development + 30% recent growth + 25% yield" },
     develop: { label: "to develop",       colorBy: "dev",    score: a => devOf(a),
-               how: "ranked by Development potential — zoning, headroom, grid" },
+               how: "ranked by Development potential — zoning, headroom, growth" },
     yield:   { label: "for rental yield", colorBy: "yield",  score: a => a.pillars.yield.score ?? 0,
                how: "ranked by gross rental yield" },
   };
@@ -1134,26 +1116,6 @@
   document.querySelectorAll("#askChips button").forEach(b =>
     b.onclick = () => { askInput.value = b.dataset.q; runAsk(); });
 
-  // ---- electricity network overlay (the "AEMO map" layer) ---------------
-  let elecLayer = null;
-  const kvColor = kv => kv >= 350 ? "#e5484d" : kv >= 200 ? "#f76808" : kv >= 100 ? "#a855f7" : "#0a84ff";
-  const kvWeight = kv => kv >= 350 ? 3 : kv >= 200 ? 2.2 : kv >= 100 ? 1.6 : 1.1;
-  async function ensureElec() {
-    if (elecLayer) return elecLayer;
-    const gj = await fetch("data/electricity.geojson?v=" + DATA_V).then(r => r.json());
-    elecLayer = L.geoJSON(gj, {
-      style: f => f.geometry.type === "LineString"
-        ? { color: kvColor(f.properties.kv || 0), weight: kvWeight(f.properties.kv || 0), opacity: .85 } : {},
-      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, color: "#fff", weight: 1, fillColor: "#ffd60a", fillOpacity: .95 }),
-      onEachFeature: (f, l) => l.bindTooltip(`${f.properties.name ? f.properties.name + " · " : ""}${f.properties.kv || "?"} kV`),
-    });
-    return elecLayer;
-  }
-  document.getElementById("elecToggle").onchange = async e => {
-    const lyr = await ensureElec();
-    if (e.target.checked) lyr.addTo(map); else map.removeLayer(lyr);
-  };
-
   // ---- train stations overlay --------------------------------------------
   let stnLayer = null;
   async function ensureStations() {
@@ -1211,7 +1173,7 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") { closeGuide(); closeSearch(); closeWeights(); closeAsk(); } });
 
   // ---- init -------------------------------------------------------------
-  setTheme(localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  setTheme(localStorage.getItem("theme") || "light");   // bright by default; dark stays a saved choice
   const fromHash = readHash();
   if (fromHash) {                       // restore a shared view
     setSlider(); setMinSlider(); highlightModes(); refresh();
