@@ -107,8 +107,8 @@ body{font:15px/1.45 var(--sans);color:var(--ink);background:var(--map-bg);
 /* presets disclosure: collapsed by default to keep first use simple */
 details.dock-sec summary.sec-h{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;user-select:none}
 details.dock-sec summary.sec-h::-webkit-details-marker{display:none}
-details.dock-sec summary.sec-h::after{content:"";width:7px;height:7px;border-right:1.8px solid var(--ink3);
-  border-bottom:1.8px solid var(--ink3);transform:rotate(-45deg);transition:transform .18s ease;margin-left:auto;margin-right:3px}
+details.dock-sec summary.sec-h::after{content:"";width:7px;height:7px;border-right:1.8px solid var(--ink2);
+  border-bottom:1.8px solid var(--ink2);transform:rotate(-45deg);transition:transform .18s ease;margin-left:auto;margin-right:3px}
 details.dock-sec[open] summary.sec-h::after{transform:rotate(45deg)}
 details.dock-sec summary.sec-h:hover{color:var(--ink)}
 .modecopy{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.45}

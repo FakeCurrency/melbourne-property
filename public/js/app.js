@@ -469,8 +469,13 @@
       ${nrow("SEIFA decile", cols.map(c => c.pillars.seifa.decile), v => v)}
       ${nrow("Median house", cols.map(c => c.market.median_house), money)}
       ${nrow("Rent / week", cols.map(c => c.market.rent_weekly), v => "$" + Math.round(v))}
-      ${nrow("Gross yield", cols.map(c => c.market.yield_headline ?? c.market.yield_house),
-        v => v + "%", false, "same basis as the scorecard — unit yield where units dominate the stock")}
+      ${(() => {                       // per-column basis, no winner across mixed bases
+        const yv = cols.map(c => c.market.yield_headline ?? c.market.yield_house);
+        const unit = cols.map(c => c.market.yield_basis === "unit");
+        const cls = unit.every(u => u === unit[0]) ? win(yv, false) : yv.map(() => "");
+        return row("Gross yield", yv.map((v, i) => v == null ? null : v + "%" + (unit[i] ? " unit" : "")),
+          cls, "same basis as the scorecard — unit yield where units dominate the stock; no winner is marked when columns use different bases");
+      })()}
       ${nrow("3-yr growth", cols.map(c => c.market.house_3yr_cagr), v => v + "%/yr")}
       ${nrow("Affordability", cols.map(c => c.market.afford_ratio), v => v + "× income", true, "median house ÷ median household income — lower is more affordable")}
       ${nrow("Nearest station", cols.map(c => c.transit.nearest_station_km), v => v + " km", true)}
@@ -507,6 +512,8 @@
       compareWith = [...(compareWith || []), code]
         .filter((c, i, arr) => c !== selected && arr.indexOf(c) === i).slice(0, 2);
       repaint(); renderCompare(selected, compareWith); writeHash();
+      document.getElementById("srlive").textContent =
+        `Comparing ${A[selected].name} with ${compareWith.map(c => A[c].name).join(" and ")}.`;
       return;
     }
     // navigating to a suburb the min-score filter is hiding: drop the filter so
@@ -1194,6 +1201,7 @@
   // ---- theme ------------------------------------------------------------
   function setTheme(t) {
     document.documentElement.dataset.theme = t; localStorage.setItem("theme", t);
+    document.querySelector('meta[name="theme-color"]').setAttribute("content", t === "dark" ? "#1c1c1e" : "#f2f2f7");
     map.removeLayer(base); base = tilesFor(t === "dark").addTo(map); base.bringToBack();
     map.removeLayer(labels); labels = labelsFor(t === "dark").addTo(map);
   }

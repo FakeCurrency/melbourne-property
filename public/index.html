@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.basemaps.cartocdn.com; connect-src 'self' https://nominatim.openstreetmap.org; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-4L7lSyW5Ya1klsshAk3HeZdMay3zRZqZLUN2bDQHowA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.basemaps.cartocdn.com; connect-src 'self' https://nominatim.openstreetmap.org; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'" />
 <title>Melbourne Property — live, invest &amp; develop scores by suburb</title>
 <meta name="description" content="Every Greater Melbourne suburb scored for liveability and development potential — crime, prices, rents, yield, schools, trains, zoning and hazards from public government data." />
 <meta name="theme-color" content="#f2f2f7" />
+<!-- restore a saved dark theme before first paint (hash allowed in the CSP above,
+     so returning dark-mode users don't get a light boot-screen flash) -->
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("theme")||"light"}catch(e){}</script>
 <meta property="og:title" content="Melbourne Property — suburb scores" />
 <meta property="og:description" content="361 Melbourne suburbs scored for living and investing: safety, prices, yield, schools, trains, zoning. Free, government data." />
 <meta property="og:type" content="website" />

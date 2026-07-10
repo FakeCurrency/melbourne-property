@@ -14,6 +14,9 @@ on:
     paths:
       - "public/**"
       - "tests/frontend/**"
+  # kicked explicitly by refresh_data.yml — GITHUB_TOKEN pushes don't fire
+  # push triggers, so the monthly data commit wouldn't get smoke-tested otherwise
+  workflow_dispatch:
 
 jobs:
   smoke:
