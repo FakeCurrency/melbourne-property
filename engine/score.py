@@ -60,11 +60,11 @@ def _explain_live(p: dict, family: float, transit: dict, r: dict) -> str:
                 "liveability signals are shown for completeness but aren't meaningful here; "
                 "crime uses the surrounding LGA's rates.")
     s = p["person_safety"]["score"] or 50
-    safety = (f"among the safest {_safest_pct(s)}% of Greater Melbourne for crimes against the person"
+    safety = (f"among the safest {_safest_pct(s)}% of {config.GCC_NAME} for crimes against the person"
               if s >= 78 else
               "lower-than-average personal-crime rates" if s >= 55 else
               "mid-range personal-crime rates" if s >= 40 else
-              "elevated personal-crime rates by Melbourne standards")
+              f"elevated personal-crime rates by {config.CITY['name']} standards")
     # Per-resident caveat for CBD-style precincts with big visitor populations.
     if (r.get("crime_source") == "suburb" and (r.get("person_crime") or 0) > 2500):
         safety += (" (rates are per resident — precincts with large daytime/visitor "

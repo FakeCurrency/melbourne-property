@@ -4,8 +4,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 
-from . import config, geo, score
-from .sources import census, crime, electricity, erp, prices, rents, schools, transport, zoning
+from . import config, geo, score, sources
+from .sources import census, electricity, erp
 
 SOURCES_NOTE = {
     "boundaries": "ABS ASGS Edition 3 SA2 (2021)",
@@ -44,6 +44,10 @@ def _yield_pct(weekly_rent, price):
 
 
 def build() -> None:
+    st = sources.for_state(config.STATE_CODE)   # state-specific adapter set
+    crime, prices, rents = st.crime, st.prices, st.rents
+    schools, transport, zoning = st.schools, st.transport, st.zoning
+
     print("1/9 boundaries"); index, geoms = _load_sa2_index()
     names = {code: m["name"] for code, m in index.items()}
     points = geo.sa2_points()

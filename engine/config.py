@@ -60,7 +60,7 @@ CITIES = {
         "slug": "sydney", "name": "Sydney",
         "gcc": "Greater Sydney",
         "state": "New South Wales", "state_code": "NSW",
-        "ready": False,
+        "ready": True,   # NSW adapters in sources/nsw/ (v1 — see docs/AUSTRALIA.md caveats)
         "bbox": (149.9, -34.6, 151.8, -32.8),   # incl. Central Coast + Blue Mountains foothills
         "origin": (151.0, -33.8),
         "regions": {
