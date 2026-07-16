@@ -51,8 +51,47 @@ jobs:
           PY
 
       - name: Deep NSW source recon (CKAN resources, CSV samples, ArcGIS zoning layer)
-        continue-on-error: true
+        if: false   # recon done — findings recorded in runs 2-3; flip on if a source moves
         run: python -m engine.tools.nsw_recon
+
+      - name: Full Sydney build (NSW adapters)
+        id: sydney_build
+        continue-on-error: true
+        timeout-minutes: 25
+        run: |
+          python -m engine.run --city sydney
+          python - <<'PY'
+          import json
+          d = json.load(open("public/data/sydney/scores.json"))
+          a = list(d["areas"].values())
+          print(f"== Sydney build summary: {len(a)} areas")
+          checks = {
+              "prices":       lambda v: (v.get("market") or {}).get("median_house"),
+              "rents":        lambda v: (v.get("market") or {}).get("rent_weekly"),
+              "zoning":       lambda v: v.get("zoning"),
+              "crime_suburb": lambda v: (v.get("coverage") or {}).get("crime") == "suburb",
+              "station_km":   lambda v: (v.get("transit") or {}).get("nearest_station_km") is not None,
+              "schools":      lambda v: (v.get("schools") or {}).get("nearest_primary_km") is not None,
+          }
+          for k, f in checks.items():
+              print(f"  {k:14} {sum(1 for v in a if f(v))}/{len(a)}")
+          top = sorted(a, key=lambda v: -v["overall"])[:5]
+          print("  top by overall:", [(v["name"], v["overall"], v["grade"]) for v in top])
+          PY
+
+      - name: Commit Sydney data back to this branch
+        if: steps.sydney_build.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/sydney public/data/cities.json
+          if git diff --cached --quiet; then
+            echo "No Sydney data changes."
+          else
+            git commit -m "Sydney v1 dataset: full --city sydney build via CI"
+            git pull --rebase origin "${{ github.ref_name }}"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
 
       - name: Commit Sydney boundaries back to this branch
         run: |
