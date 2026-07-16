@@ -26,10 +26,11 @@ _MONTHS = {m: i + 1 for i, m in enumerate(
     ["january", "february", "march", "april", "may", "june", "july",
      "august", "september", "october", "november", "december"])}
 
-# fetch()'s "(melb-scorer data build)" UA gets WAF-403 HTML back for the xlsx
-# files (run #4: every workbook failed "File is not a zip file"), while a plain
-# browser UA is let through. One session keeps the landing-page cookies for the
-# downloads.
+# The Fair Trading site serves the landing page to anyone but gates the xlsx
+# asset URLs behind a JS challenge — run #4 (bot UA) and run #5 (browser UA +
+# landing-page cookies) both got an HTML page back for every workbook. So like
+# the Valuer General zips, direct download is attempted first but the Wayback
+# Machine is the fallback that actually works.
 _SESSION = requests.Session()
 _SESSION.headers.update({
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -39,11 +40,12 @@ _SESSION.headers.update({
 
 
 def _fetch_xlsx(url: str, filename: str):
-    """Download a bond workbook, validating it's a real zip (xlsx) not a WAF page.
+    """Download a bond workbook, validating it's a real zip (xlsx) not an HTML page.
 
-    Also self-heals cache poisoning: run #4 stored WAF HTML under .xlsx names,
-    and those bad files live on in the Actions data_raw cache.
+    Also self-heals cache poisoning: earlier runs stored challenge HTML under
+    .xlsx names, and those bad files live on in the Actions data_raw cache.
     """
+    from ...fetch import fetch_wayback
     config.DATA_RAW.mkdir(parents=True, exist_ok=True)
     dest = config.DATA_RAW / filename
     if dest.exists() and dest.stat().st_size > 0:
@@ -51,15 +53,22 @@ def _fetch_xlsx(url: str, filename: str):
             print(f"  cached  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
             return dest
         print(f"  rents: cached {filename} is not a zip — re-downloading")
-    r = _SESSION.get(url, timeout=120)
-    r.raise_for_status()
-    if r.content[:2] != b"PK":
-        head = r.content[:120].decode("utf-8", "replace").replace("\n", " ")
-        raise RuntimeError(f"not an xlsx (content-type={r.headers.get('content-type')!r}, "
-                           f"starts {head!r})")
-    dest.write_bytes(r.content)
-    print(f"  downloaded  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
-    return dest
+        dest.unlink()
+    try:
+        r = _SESSION.get(url, timeout=120)
+        r.raise_for_status()
+        if r.content[:2] != b"PK":
+            raise RuntimeError(f"got {r.headers.get('content-type')!r} instead of xlsx")
+        dest.write_bytes(r.content)
+        print(f"  downloaded  {filename} ({dest.stat().st_size/1e6:.1f} MB)")
+        return dest
+    except Exception as e:  # noqa: BLE001 - JS-challenged asset URL: go via Wayback
+        print(f"  rents: direct download blocked ({e}) — trying Wayback")
+    path = fetch_wayback(url, filename)
+    if path.read_bytes()[:2] != b"PK":
+        path.unlink()
+        raise RuntimeError("Wayback copy is not an xlsx either")
+    return path
 
 
 def _lodgement_urls() -> list[tuple[int, int, str]]:
@@ -90,10 +99,13 @@ def _rents_by_postcode() -> tuple[dict[str, dict], str]:
     urls = _lodgement_urls()
     if not urls:
         raise RuntimeError("no lodgement workbooks found on the Fair Trading page")
-    latest12 = urls[-12:]
-    label = f"{latest12[-1][0]}-{latest12[-1][1]:02d}"
+    # newest first, walking back past months Wayback hasn't archived, until 12 parse
+    label = None
+    parsed = 0
     acc: dict[str, dict] = defaultdict(lambda: {"all": [], "house3": [], "flat2": [], "n": 0})
-    for year, mon, url in latest12:
+    for year, mon, url in reversed(urls[-24:]):
+        if parsed >= 12:
+            break
         try:
             path = _fetch_xlsx(url, f"nsw_bonds_{year}_{mon:02d}.xlsx")
             wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
@@ -134,8 +146,11 @@ def _rents_by_postcode() -> tuple[dict[str, dict], str]:
                 elif dw.startswith(("f", "u")) and bed == "2":
                     a["flat2"].append(rent)
             wb.close()
+            parsed += 1
+            label = label or f"{year}-{mon:02d}"
         except Exception as e:  # noqa: BLE001 - one bad month shouldn't kill rents
             print(f"  rents: {url.rsplit('/', 1)[-1]} failed ({e})")
+    label = label or f"{urls[-1][0]}-{urls[-1][1]:02d}"
     out = {pc: a for pc, a in acc.items() if a["n"] >= 5}
     if out:   # never cache a failed (empty) run
         cache.write_text(json.dumps({"postcodes": out, "latest": label}), encoding="utf-8")
