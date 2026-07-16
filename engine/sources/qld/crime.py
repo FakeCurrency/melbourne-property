@@ -18,7 +18,7 @@ the national ABS boundary spatial join.
 from __future__ import annotations
 
 import csv
-import io
+import re
 from collections import defaultdict
 
 from ... import config, geo
@@ -28,6 +28,8 @@ import json
 
 DIVISION_CSV = ("https://open-crime-data.s3-ap-southeast-2.amazonaws.com/"
                 "Crime%20Statistics/division_Reported_Offences_Number.csv")
+LGA_RATES_CSV = ("https://open-crime-data.s3-ap-southeast-2.amazonaws.com/"
+                 "Crime%20Statistics/LGA_Reported_Offences_Rates.csv")
 
 ROLLUP_PERSON = "offences against the person"
 ROLLUP_PROPERTY = "offences against property"
@@ -124,12 +126,83 @@ def _counts_by_division() -> dict[str, dict]:
     return counts
 
 
+def _norm_lga(n: str) -> str:
+    """'Brisbane City Council' / ABS 'Brisbane' -> 'BRISBANE'."""
+    n = re.sub(r"\s*\((?:[^)]*)\)\s*$", "", str(n).strip())
+    n = re.sub(r"\s+(?:Aboriginal\s+Shire|City|Shire|Regional|Rural City|Town|Borough)?"
+               r"\s*Council$", "", n, flags=re.I)
+    return re.sub(r"\s+", " ", n).strip().upper()
+
+
+def _rates_by_lga() -> dict[str, dict]:
+    """{LGA: {person, property, total}} annual rates per 100k — the latest 12
+    monthly rates summed, from the QPS LGA rates file (division matching only
+    reaches ~1/4 of SA2s, so this is the coverage backbone like Vic's)."""
+    cache = config.DATA_RAW / "qld_crime_lga_rates.json"
+    if fresh(cache, 60):
+        print("  cached  qld_crime_lga_rates.json")
+        return json.loads(cache.read_text(encoding="utf-8"))
+
+    path = fetch(LGA_RATES_CSV, "qld_crime_lga_rates.csv", max_age_days=60)
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        rows = csv.reader(fh)
+        header = next(rows)
+        lower = [str(h).strip().lower() for h in header]
+        i_lga = next(i for i, h in enumerate(lower) if "lga" in h)
+        i_month = next(i for i, h in enumerate(lower) if "month" in h)
+        rollup_p = next((i for i, h in enumerate(lower) if h == ROLLUP_PERSON), None)
+        rollup_q = next((i for i, h in enumerate(lower) if h == ROLLUP_PROPERTY), None)
+        person_cols = [rollup_p] if rollup_p is not None else \
+            [i for i, h in enumerate(lower) if h in PARENT_PERSON]
+        property_cols = [rollup_q] if rollup_q is not None else \
+            [i for i, h in enumerate(lower) if h in PARENT_PROPERTY]
+
+        per = defaultdict(dict)      # lga -> (y,m) -> [person_rate, property_rate]
+        months_seen = set()
+        for r in rows:
+            if len(r) <= max(i_lga, i_month):
+                continue
+            mk = _month_key(r[i_month])
+            lga = _norm_lga(r[i_lga])
+            if not mk or not lga:
+                continue
+            months_seen.add(mk)
+
+            def _s(cols):
+                t = 0.0
+                for i in cols:
+                    if i < len(r):
+                        v = str(r[i]).strip().replace(",", "")
+                        try:
+                            t += float(v) if v else 0.0
+                        except ValueError:
+                            pass
+                return t
+
+            cell = per[lga].setdefault(mk, [0.0, 0.0])
+            cell[0] += _s(person_cols)
+            cell[1] += _s(property_cols)
+
+    latest12 = set(sorted(months_seen)[-12:])
+    out = {}
+    for lga, by_month in per.items():
+        p = sum(v[0] for m, v in by_month.items() if m in latest12)
+        q = sum(v[1] for m, v in by_month.items() if m in latest12)
+        out[lga] = {"person": round(p, 1), "property": round(q, 1), "total": round(p + q, 1)}
+    cache.write_text(json.dumps(out), encoding="utf-8")
+    print(f"  crime: QPS LGA rates for {len(out)} LGAs (latest 12 months)")
+    return out
+
+
 def get_crime() -> dict[str, dict]:
     """{sa2_code: {lga, person, property, total}} — LGA names via the national
-    ABS boundary join; no QLD LGA rate fallback in v1 (values stay None)."""
+    ABS boundary join, per-100k rates from the QPS LGA rates file (the app's
+    fallback for SA2s the division matching misses)."""
     lgas = _load_vic_lgas()          # filters by config.STATE_NAME — city-agnostic
+    rates = _rates_by_lga()
     points = geo.sa2_points()
     out = {}
+    matched = 0
     for code, (x, y) in points.items():
         chosen = None
         for lga in lgas:
@@ -141,9 +214,15 @@ def get_crime() -> dict[str, dict]:
             chosen = min(lgas, key=lambda L: (
                 (x - (L["bbox"][0] + L["bbox"][2]) / 2) ** 2
                 + (y - (L["bbox"][1] + L["bbox"][3]) / 2) ** 2))
-        out[code] = {"lga": chosen["name"] if chosen else None,
-                     "person": None, "property": None, "total": None}
-    print(f"  crime: LGA names assigned for {len(out)} SA2s (QPS rates are division-level)")
+        name = chosen["name"] if chosen else None
+        r = rates.get(_norm_lga(name)) if name else None
+        if r:
+            matched += 1
+        out[code] = {"lga": name,
+                     "person": r["person"] if r else None,
+                     "property": r["property"] if r else None,
+                     "total": r["total"] if r else None}
+    print(f"  crime: LGA names for {len(out)} SA2s, LGA rates matched for {matched}")
     return out
 
 
